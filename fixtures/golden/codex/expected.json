@@ -1,0 +1,26 @@
+{
+  "provider": "codex",
+  "chats": [
+    {
+      "providerChatId": "codex-golden",
+      "startedAt": "2026-01-02T00:00:00.000Z",
+      "endedAt": "2026-01-02T00:00:02.000Z",
+      "requests": 1,
+      "tokens": {
+        "inputTokens": 120,
+        "cachedInputTokens": 40,
+        "cacheCreationInputTokens": 0,
+        "outputTokens": 20,
+        "reasoningOutputTokens": 5,
+        "totalTokens": 145
+      },
+      "models": [
+        {
+          "model": "codex-model-golden",
+          "requests": 1,
+          "totalTokens": 145
+        }
+      ]
+    }
+  ]
+}

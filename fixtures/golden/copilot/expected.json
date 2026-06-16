@@ -1,0 +1,26 @@
+{
+  "provider": "copilot",
+  "chats": [
+    {
+      "providerChatId": "copilot-golden",
+      "startedAt": "2026-01-01T00:00:00.000Z",
+      "endedAt": "2026-01-01T00:00:01.000Z",
+      "requests": 1,
+      "tokens": {
+        "inputTokens": 100,
+        "cachedInputTokens": 25,
+        "cacheCreationInputTokens": 0,
+        "outputTokens": 10,
+        "reasoningOutputTokens": 0,
+        "totalTokens": 110
+      },
+      "models": [
+        {
+          "model": "copilot-model-golden",
+          "requests": 1,
+          "totalTokens": 110
+        }
+      ]
+    }
+  ]
+}

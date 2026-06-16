@@ -1,0 +1,2 @@
+{"type":"ai-title","sessionId":"claude-golden","aiTitle":"Synthetic fixture chat"}
+{"timestamp":"2026-01-03T00:00:00.000Z","sessionId":"claude-golden","cwd":"/workspace/golden","message":{"id":"message-golden","model":"claude-model-golden","usage":{"input_tokens":10,"cache_creation_input_tokens":20,"cache_read_input_tokens":30,"output_tokens":5}}}

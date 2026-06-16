@@ -1,0 +1,27 @@
+{
+  "provider": "claude",
+  "chats": [
+    {
+      "providerChatId": "claude-golden",
+      "title": "Synthetic fixture chat",
+      "startedAt": "2026-01-03T00:00:00.000Z",
+      "endedAt": "2026-01-03T00:00:00.000Z",
+      "requests": 1,
+      "tokens": {
+        "inputTokens": 10,
+        "cachedInputTokens": 30,
+        "cacheCreationInputTokens": 20,
+        "outputTokens": 5,
+        "reasoningOutputTokens": 0,
+        "totalTokens": 65
+      },
+      "models": [
+        {
+          "model": "claude-model-golden",
+          "requests": 1,
+          "totalTokens": 65
+        }
+      ]
+    }
+  ]
+}

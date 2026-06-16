@@ -1,0 +1,189 @@
+{
+  "name": "breadcrumbs",
+  "displayName": "Breadcrumbs",
+  "description": "Inspect local VS Code coding-agent token usage data sources.",
+  "version": "0.0.0",
+  "publisher": "goeselt",
+  "license": "MIT",
+  "icon": "resources/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/goeselt/breadcrumbs.git"
+  },
+  "engines": {
+    "vscode": "^1.120.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "copilot",
+    "claude",
+    "codex",
+    "tokens",
+    "usage",
+    "opentelemetry"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "capabilities": {
+    "virtualWorkspaces": {
+      "supported": false
+    },
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "Breadcrumbs only inspects allowlisted metadata from known extension-host paths in Restricted Mode.",
+      "restrictedConfigurations": [
+        "breadcrumbs.copilotOtelFile"
+      ]
+    }
+  },
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "breadcrumbs.inspectSources",
+        "title": "Breadcrumbs: Inspect Agent Usage Sources"
+      },
+      {
+        "command": "breadcrumbs.refreshIndex",
+        "title": "Breadcrumbs: Refresh Usage Index",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "breadcrumbs.openOverview",
+        "title": "Breadcrumbs: Open Overview"
+      },
+      {
+        "command": "breadcrumbs.openChats",
+        "title": "Breadcrumbs: Open Chats"
+      },
+      {
+        "command": "breadcrumbs.openSources",
+        "title": "Breadcrumbs: Open Sources"
+      },
+      {
+        "command": "breadcrumbs.exportMetadataJson",
+        "title": "Breadcrumbs: Export Metadata JSON",
+        "icon": "$(export)"
+      },
+      {
+        "command": "breadcrumbs.openChatQuickPick",
+        "title": "Breadcrumbs: Open Chat",
+        "icon": "$(search)"
+      },
+      {
+        "command": "breadcrumbs.filterRecentChats",
+        "title": "Breadcrumbs: Filter Recent Chats",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "breadcrumbs.refreshChatSnapshot",
+        "title": "Breadcrumbs: Refresh Chat Snapshot",
+        "icon": "$(refresh)"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "breadcrumbs",
+          "title": "Breadcrumbs",
+          "icon": "resources/breadcrumbs.svg"
+        }
+      ]
+    },
+    "views": {
+      "breadcrumbs": [
+        {
+          "id": "breadcrumbs.reports",
+          "name": "Reports",
+          "icon": "resources/breadcrumbs.svg"
+        },
+        {
+          "id": "breadcrumbs.recentChats",
+          "name": "Recent Chats",
+          "icon": "resources/breadcrumbs.svg"
+        },
+        {
+          "id": "breadcrumbs.sources",
+          "name": "Sources",
+          "icon": "resources/breadcrumbs.svg"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "breadcrumbs.recentChats",
+        "contents": "No agent usage data found.\n[Refresh Index](command:breadcrumbs.refreshIndex)\n[Inspect Sources](command:breadcrumbs.openSources)",
+        "when": "breadcrumbs.hasChats == false"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "breadcrumbs.refreshIndex",
+          "when": "view == breadcrumbs.reports",
+          "group": "navigation"
+        },
+        {
+          "command": "breadcrumbs.openChatQuickPick",
+          "when": "view == breadcrumbs.recentChats",
+          "group": "navigation@1"
+        },
+        {
+          "command": "breadcrumbs.filterRecentChats",
+          "when": "view == breadcrumbs.recentChats",
+          "group": "navigation@2"
+        },
+        {
+          "command": "breadcrumbs.refreshIndex",
+          "when": "view == breadcrumbs.recentChats || view == breadcrumbs.sources",
+          "group": "navigation@3"
+        },
+        {
+          "command": "breadcrumbs.openSources",
+          "when": "view == breadcrumbs.sources",
+          "group": "navigation@1"
+        },
+        {
+          "command": "breadcrumbs.exportMetadataJson",
+          "when": "view == breadcrumbs.reports || view == breadcrumbs.recentChats",
+          "group": "navigation@4"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Breadcrumbs",
+      "properties": {
+        "breadcrumbs.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable Breadcrumbs commands."
+        },
+        "breadcrumbs.copilotOtelFile": {
+          "type": "string",
+          "default": "",
+          "description": "Optional expected Copilot OTel JSONL file. If empty, Breadcrumbs reads the Copilot OTel VS Code setting.",
+          "scope": "machine"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "verify": "npm run typecheck && npm test && npm run build",
+    "vscode-engine": "VSCODE_API=\"$(npm view @types/vscode version)\" && npm pkg set \"engines.vscode=^${VSCODE_API}\"",
+    "update": "npm run vscode-engine && npm install",
+    "package": "npx --yes --package @vscode/vsce vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.3",
+    "@types/vscode": "^1.120.0",
+    "esbuild": "^0.28.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  }
+}

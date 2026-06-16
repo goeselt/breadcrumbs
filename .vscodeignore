@@ -1,0 +1,14 @@
+.github/
+.vscode/
+docs/
+fixtures/
+src/
+node_modules/
+esbuild.mjs
+tsconfig.json
+vitest.config.mts
+.gitignore
+.vscodeignore
+package-lock.json
+CONTRIBUTING.md
+resources/icon.svg
