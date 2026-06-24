@@ -61,6 +61,7 @@ jobs:
         uses: goeselt/pedant@74965deb38735f0b01dcddce2f6e790feabdfcd9 # v1.4.0
         with:
           summary-github-step: true
+          ignore: resources/vendor/chart.umd.min.js
 
       - name: Publish Pedant Report
         if: always()

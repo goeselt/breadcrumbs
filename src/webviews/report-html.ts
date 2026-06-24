@@ -107,13 +107,15 @@ function renderBreadcrumb(kind: ReportViewKind, data: ReportViewData): string {
     const href = crumb.arg === undefined ? `command:${crumb.command}` : commandHref(crumb.command, crumb.arg)
     return `<a class="breadcrumb-link" href="${escapeHtml(href)}">${escapeHtml(crumb.label)}</a>`
   })
-  return `<nav class="breadcrumb" aria-label="Breadcrumb">${items.join('<span class="breadcrumb-sep" aria-hidden="true">›</span>')}</nav>`
+  return `<nav class="breadcrumb" aria-label="Breadcrumb">${items.join('<span class="breadcrumb-sep" aria-hidden="true">&rsaquo;</span>')}</nav>`
 }
 
 function breadcrumbCrumbs(kind: ReportViewKind, data: ReportViewData): Crumb[] {
   const provider = data.selectedProvider
   if (kind === 'overview') {
-    return provider ? [{ label: 'Overview', command: 'breadcrumbs.openOverview' }, { label: providerLabel(provider) }] : []
+    return provider
+      ? [{ label: 'Overview', command: 'breadcrumbs.openOverview' }, { label: providerLabel(provider) }]
+      : []
   }
   if (kind === 'chats') {
     return provider ? [{ label: 'Chats', command: 'breadcrumbs.openChats' }, { label: providerLabel(provider) }] : []

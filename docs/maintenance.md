@@ -16,14 +16,14 @@ shipped). `.vscodeignore` controls what is excluded from the package.
 
 ## Dependency And Engine Updates
 
-Pin the VS Code engine and `@types/vscode` to the latest published API:
+Pin the Visual Studio Code engine and `@types/vscode` to the latest published API:
 
 ```bash
 npm run update
 ```
 
 This sets `engines.vscode` and installs the matching `@types/vscode`. Review the diff -- raising the engine drops
-support for older VS Code versions.
+support for older Visual Studio Code versions.
 
 ## Release
 

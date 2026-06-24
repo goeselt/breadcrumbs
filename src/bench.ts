@@ -54,7 +54,7 @@ async function timeLoad(
 function summarizeModes(report: ChatMetadataReport): string {
   const counts = new Map<string, number>()
   for (const file of report.index?.files ?? []) counts.set(file.mode, (counts.get(file.mode) ?? 0) + 1)
-  return [...counts].map(([mode, count]) => `${mode}×${count}`).join(', ') || 'no files'
+  return [...counts].map(([mode, count]) => `${mode} x${count}`).join(', ') || 'no files'
 }
 
 function median(values: number[]): number {
@@ -86,7 +86,7 @@ async function main(): Promise<void> {
         `chats:      ${cold.report.chats.length} (${cold.report.index?.files.length ?? 0} files)`,
         `cold build: ${cold.ms.toFixed(1)} ms  [${summarizeModes(cold.report)}]`,
         `warm load:  ${warm.toFixed(1)} ms (median of ${args.runs})`,
-        `speedup:    ${speedup.toFixed(1)}×`,
+        `speedup:    ${speedup.toFixed(1)}x`,
         '',
       ].join('\n'),
     )
