@@ -114,7 +114,7 @@ export async function readCopilotTraceMetadata(databaseFile: string): Promise<Ch
       SELECT * FROM spans
       WHERE operation_name = 'invoke_agent'
         AND chat_session_id IS NOT NULL
-        AND (agent_name = 'GitHub Copilot' OR name = 'invoke_agent GitHub Copilot')
+        AND (agent_name LIKE 'GitHub Copilot%' OR name LIKE 'invoke_agent GitHub Copilot%')
       ORDER BY start_time_ms
     `,
       )
