@@ -31,10 +31,15 @@ export interface IndexedJsonlFile<T> {
   diagnostics: ParserDiagnostics
 }
 
+/** Upper bound on bytes read per refresh, guarding the extension host against oversized sources. */
+export const DEFAULT_MAX_SOURCE_BYTES = 128 * 1024 * 1024
+
 export interface JsonlIndexOptions<T> {
   parserVersion: number
   project: (record: Record<string, unknown>) => T | undefined
   signal?: AbortSignal
+  /** Maximum unread bytes to ingest in a single refresh. Defaults to {@link DEFAULT_MAX_SOURCE_BYTES}. */
+  maxSourceBytes?: number
 }
 
 export interface JsonlIndexRefresh<T> {
@@ -82,6 +87,12 @@ export async function refreshJsonlIndex<T>(
   const baseRecords = rebuild ? [] : (previous?.records ?? [])
   const baseDiagnostics = rebuild ? emptyDiagnostics() : (previous?.diagnostics ?? emptyDiagnostics())
   const start = rebuild ? 0 : (previous?.byteOffset ?? 0)
+  const maxSourceBytes = options.maxSourceBytes ?? DEFAULT_MAX_SOURCE_BYTES
+  if (info.size - start > maxSourceBytes) {
+    throw new Error(
+      `JSONL source exceeds the indexing limit: ${info.size - start} unread bytes exceed ${maxSourceBytes}.`,
+    )
+  }
   const appended = await readCompleteLines(canonicalPath, start, options)
   const storedPrefixLength = rebuild ? Math.min(info.size, 4096) : prefixLength
   const storedPrefixHash =

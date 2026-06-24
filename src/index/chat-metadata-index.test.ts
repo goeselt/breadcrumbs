@@ -209,6 +209,32 @@ describe('indexed chat metadata', () => {
     expect(summarizeCalls).toBe(2)
   })
 
+  it('skips a source that exceeds the byte limit instead of reading it into memory', async () => {
+    const directory = await fixtureDirectory()
+    const storageRoot = path.join(directory, 'index')
+    const source = path.join(directory, 'oversized.jsonl')
+    await writeFile(source, `{"id":"${'x'.repeat(200)}"}\n`)
+
+    let summarizeCalls = 0
+    const results = await refreshIndexedFiles(
+      [source],
+      storageRoot,
+      {
+        parserVersion: 1,
+        maxSourceBytes: 32,
+        project: (record) => (typeof record.id === 'string' ? { id: record.id } : undefined),
+      },
+      () => {
+        summarizeCalls += 1
+        return []
+      },
+    )
+
+    expect(results[0]).toMatchObject({ mode: 'stale', chats: [] })
+    expect(results[0].warning).toContain('indexing limit')
+    expect(summarizeCalls).toBe(0)
+  })
+
   it('falls back to Copilot JSONL when the trace database schema drifts', async () => {
     const directory = await fixtureDirectory()
     const storageRoot = path.join(directory, 'index')

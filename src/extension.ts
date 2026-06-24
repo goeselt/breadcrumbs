@@ -308,7 +308,7 @@ async function loadReportView(
     if (!chatDetail) {
       chatDetail = await readIndexedChatDetail(metadata, {
         contentMode: vscode.workspace.isTrusted ? 'all' : 'none',
-        maxContentChars: 2_000,
+        maxContentChars: 500,
         maxEvents: 300,
       })
       chatDetailCache.set(cacheKey, chatDetail)

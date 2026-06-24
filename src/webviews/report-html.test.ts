@@ -42,6 +42,25 @@ describe('report Webview HTML', () => {
     expect(html).not.toContain('script-src')
   })
 
+  it('neutralizes malicious metadata that flows into overview chart configs', () => {
+    const report = fixtureReport()
+    const payload = '</template><script>alert("xss")</script>'
+    report.totals.models[0].model = payload
+    report.chats[0].models[0].model = payload
+    report.chats[0].workspacePaths = [`/repo/${payload}`]
+
+    const html = renderReportHtml('overview', { providers: [{ provider: 'codex', report }], selectedProvider: 'codex' }, 'nonce-value')
+
+    // Charts render, so the payload really does reach the chart-config templates.
+    expect(html).toContain('model-token-chart')
+    expect(html).toContain('overview-workspace-chart')
+    // The payload must not break out of the <template> or inject an executable script.
+    expect(html).not.toContain('</template><script>')
+    expect(html).not.toContain('alert("xss")')
+    // It survives only in the neutralized, JSON-escaped form.
+    expect(html).toContain('\\u003c/template')
+  })
+
   it('renders a provider-specific overview without a provider dropdown', () => {
     const report = fixtureReport()
     report.index = {
