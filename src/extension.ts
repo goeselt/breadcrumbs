@@ -1,3 +1,15 @@
+/**
+ * Extension entry point -- the VS Code glue layer.
+ *
+ * Owns no parsing logic. It wires VS Code to the testable core (`src/index`, `src/adapters`,
+ * `src/chat-*`) and holds the runtime state the views read from. Sections below, in order:
+ *   - Module state
+ *   - Activation & lifecycle
+ *   - Provider report store (in-memory, incremental refresh)
+ *   - Webview report data
+ *   - Native tree views & chat commands
+ *   - Shared helpers
+ */
 import * as vscode from 'vscode'
 import { AGENTS, type AgentId } from './agent.js'
 import { readIndexedChatDetail } from './adapters/chat-detail.js'
@@ -15,6 +27,7 @@ import { SourcesTreeProvider } from './views/sources-tree.js'
 import type { ProviderReportResult, ReportViewData } from './webviews/report-html.js'
 import { ReportPanelManager } from './webviews/report-panels.js'
 
+// === Module state ===
 let output: vscode.OutputChannel | undefined
 const indexedProviders = new Set<AgentId>()
 const refreshTimers = new Map<AgentId, NodeJS.Timeout>()
@@ -40,6 +53,7 @@ const PROVIDERS: AgentId[] = ['copilot', 'codex', 'claude']
 const COPILOT_SETTINGS = new Set(AGENTS.find((agent) => agent.id === 'copilot')?.relevantSettings ?? [])
 let metadataWatcher: vscode.Disposable | undefined
 
+// === Activation & lifecycle ===
 export function activate(ctx: vscode.ExtensionContext) {
   const log = logChannel()
   log.info(`activate ${fields({ storageRoot: ctx.globalStorageUri.fsPath })}`)
@@ -187,6 +201,7 @@ export function deactivate() {
   disposeLogChannel()
 }
 
+// === Provider report store (in-memory, incremental refresh) ===
 async function refreshProvider(
   ctx: vscode.ExtensionContext,
   provider: AgentId,
@@ -280,6 +295,7 @@ function refreshProviderResult(
   return load
 }
 
+// === Webview report data ===
 async function loadReportView(
   ctx: vscode.ExtensionContext,
   kind: ReportViewKind,
@@ -348,6 +364,7 @@ async function openChatDetail(selection?: { provider?: AgentId; chatKey?: string
   await reportPanels?.open('chatDetail', metadata.provider, metadata.chatKey)
 }
 
+// === Native tree views & chat commands ===
 async function loadDetectedProviders() {
   const discovery = discoveryReport ?? (await refreshDiscovery())
   return detectedProviderItems(discovery, providerReports)
@@ -440,6 +457,7 @@ async function refreshChatSnapshot(ctx: vscode.ExtensionContext, selection?: Cha
   )
 }
 
+// === Shared helpers ===
 async function refreshDiscovery(): Promise<DiscoveryReport> {
   discoveryReport = await discoverAgentSources()
   return discoveryReport
