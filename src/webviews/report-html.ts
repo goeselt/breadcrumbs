@@ -4,7 +4,16 @@ import { renderChatDetail } from './render-chat-detail.js'
 import { renderChats } from './render-chats.js'
 import { renderOverview } from './render-overview.js'
 import { renderSources } from './render-sources.js'
-import { providerChatDetailTitle, providerChatsTitle, providerLabel, escapeHtml } from './render-primitives.js'
+import {
+  commandHref,
+  displayChatTitle,
+  escapeHtml,
+  providerChatDetailTitle,
+  providerChatsTitle,
+  providerLabel,
+  truncateText,
+} from './render-primitives.js'
+import type { AgentId } from '../agent.js'
 import type { ReportViewData } from './types.js'
 import type { ReportViewKind } from '../views/report-tree.js'
 
@@ -56,12 +65,51 @@ export function renderReportHtml(kind: ReportViewKind, data: ReportViewData, non
 </head>
 <body>
   <main>
+    ${renderBreadcrumb(kind, data)}
     <h1>${escapeHtml(title)}</h1>
     ${body}
   </main>
   ${chartScripts}
 </body>
 </html>`
+}
+
+interface Crumb {
+  label: string
+  command?: string
+  arg?: AgentId
+}
+
+/** Breadcrumb trail giving the otherwise-disconnected report panels upward and lateral navigation. */
+function renderBreadcrumb(kind: ReportViewKind, data: ReportViewData): string {
+  const crumbs = breadcrumbCrumbs(kind, data)
+  if (crumbs.length < 2) return ''
+  const items = crumbs.map((crumb, index) => {
+    if (index === crumbs.length - 1 || !crumb.command) {
+      return `<span class="breadcrumb-current" aria-current="page">${escapeHtml(crumb.label)}</span>`
+    }
+    const href = crumb.arg === undefined ? `command:${crumb.command}` : commandHref(crumb.command, crumb.arg)
+    return `<a class="breadcrumb-link" href="${escapeHtml(href)}">${escapeHtml(crumb.label)}</a>`
+  })
+  return `<nav class="breadcrumb" aria-label="Breadcrumb">${items.join('<span class="breadcrumb-sep" aria-hidden="true">›</span>')}</nav>`
+}
+
+function breadcrumbCrumbs(kind: ReportViewKind, data: ReportViewData): Crumb[] {
+  const provider = data.selectedProvider
+  if (kind === 'overview') {
+    return provider ? [{ label: 'Overview', command: 'breadcrumbs.openOverview' }, { label: providerLabel(provider) }] : []
+  }
+  if (kind === 'chats') {
+    return provider ? [{ label: 'Chats', command: 'breadcrumbs.openChats' }, { label: providerLabel(provider) }] : []
+  }
+  if (kind === 'chatDetail') {
+    const title = data.chatDetail?.metadata ? truncateText(displayChatTitle(data.chatDetail.metadata), 48) : 'Chat'
+    const crumbs: Crumb[] = [{ label: 'Chats', command: 'breadcrumbs.openChats' }]
+    if (provider) crumbs.push({ label: providerLabel(provider), command: 'breadcrumbs.openChats', arg: provider })
+    crumbs.push({ label: title })
+    return crumbs
+  }
+  return []
 }
 
 function chartLibraryScript(): string {

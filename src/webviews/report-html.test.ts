@@ -42,6 +42,35 @@ describe('report Webview HTML', () => {
     expect(html).not.toContain('script-src')
   })
 
+  it('offers next-step actions when no chats are indexed', () => {
+    const html = renderReportHtml('chats', { providers: [] }, 'nonce-value')
+    expect(html).toContain('No indexed chats are available')
+    expect(html).toContain('command:breadcrumbs.refreshIndex')
+    expect(html).toContain('command:breadcrumbs.openSources')
+  })
+
+  it('renders an upward breadcrumb for provider views but not for root views', () => {
+    const report = fixtureReport()
+    const providerOverview = renderReportHtml(
+      'overview',
+      { providers: [{ provider: 'codex', report }], selectedProvider: 'codex' },
+      'nonce-value',
+    )
+    expect(providerOverview).toContain('class="breadcrumb"')
+    expect(providerOverview).toContain('command:breadcrumbs.openOverview')
+    expect(providerOverview).toContain('aria-current="page"')
+
+    const providerChats = renderReportHtml(
+      'chats',
+      { providers: [{ provider: 'codex', report }], selectedProvider: 'codex' },
+      'nonce-value',
+    )
+    expect(providerChats).toContain('command:breadcrumbs.openChats')
+
+    const allOverview = renderReportHtml('overview', { providers: [{ provider: 'codex', report }] }, 'nonce-value')
+    expect(allOverview).not.toContain('class="breadcrumb"')
+  })
+
   it('neutralizes malicious metadata that flows into overview chart configs', () => {
     const report = fixtureReport()
     const payload = '</template><script>alert("xss")</script>'
@@ -622,6 +651,9 @@ describe('report Webview HTML', () => {
     )
 
     expect(html).toContain('<h1>Codex Chat</h1>')
+    // Breadcrumb gives the detail view a way back up to the provider's chat list.
+    expect(html).toContain('class="breadcrumb"')
+    expect(html).toContain('command:breadcrumbs.openChats')
     expect(html).toContain('Captured content is disabled while VS Code is in Restricted Mode.')
     expect(html).not.toContain('Export metadata JSON')
     expect(html).not.toContain('command:breadcrumbs.exportMetadataJson?')
@@ -735,7 +767,7 @@ describe('report Webview HTML', () => {
       'nonce-value',
     )
 
-    expect(html).not.toContain('aria-current')
+    expect(html).not.toContain('detail-control active')
     expect(html).not.toContain('Export metadata JSON')
     expect(html).toContain('Arguments / command')
     expect(html).toContain('printf &quot;&lt;sensitive&gt;&quot;')

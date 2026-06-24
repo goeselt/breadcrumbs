@@ -104,13 +104,21 @@ export function chartColor(index: number, alpha = 0.88): string {
   return `rgba(${value[0]}, ${value[1]}, ${value[2]}, ${alpha})`
 }
 
+/** Empty-state message with optional next-step command links so the view is not a dead end. */
+export function emptyState(message: string, actions: Array<{ label: string; command: string }> = []): string {
+  const links = actions
+    .map((action) => `<a class="empty-action" href="command:${escapeHtml(action.command)}">${escapeHtml(action.label)}</a>`)
+    .join('')
+  return `<div class="empty">${escapeHtml(message)}${actions.length > 0 ? `<div class="empty-actions">${links}</div>` : ''}</div>`
+}
+
 export type ChartFrame = 'default' | 'slim' | 'bars-sm' | 'bars-md' | 'bars-lg' | 'bars-xl'
 
 export function chartPanel(title: string, id: string, config: unknown, frame: ChartFrame = 'default'): string {
   const frameClass = frame === 'default' ? '' : ` chart-frame--${frame}`
   return `<section class="chart-panel">
     <h3>${escapeHtml(title)}</h3>
-    <div class="chart-frame${frameClass}"><canvas id="${escapeHtml(id)}" data-chart></canvas></div>
+    <div class="chart-frame${frameClass}"><canvas id="${escapeHtml(id)}" data-chart role="img" aria-label="${escapeHtml(title)} chart"></canvas></div>
     <template class="chart-config" data-chart-target="${escapeHtml(id)}">${escapeJsonForHtml(config)}</template>
   </section>`
 }
