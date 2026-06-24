@@ -16,11 +16,25 @@ describe('topSlices', () => {
   })
 
   it('drops non-positive values and sorts descending', () => {
-    expect(topSlices([['a', 0], ['b', 5], ['c', -2]])).toEqual({ labels: ['b'], values: [5] })
+    expect(
+      topSlices([
+        ['a', 0],
+        ['b', 5],
+        ['c', -2],
+      ]),
+    ).toEqual({ labels: ['b'], values: [5] })
   })
 
   it('omits the "Other" slice when everything fits', () => {
-    expect(topSlices([['a', 2], ['b', 1]], 5)).toEqual({ labels: ['a', 'b'], values: [2, 1] })
+    expect(
+      topSlices(
+        [
+          ['a', 2],
+          ['b', 1],
+        ],
+        5,
+      ),
+    ).toEqual({ labels: ['a', 'b'], values: [2, 1] })
   })
 })
 

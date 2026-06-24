@@ -21,7 +21,7 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesTreeI
 
   refresh(): void {
     this.data = undefined
-    // eslint-disable-next-line unicorn/no-useless-undefined -- vscode.EventEmitter#fire requires an explicit argument
+
     this.changed.fire(undefined)
   }
 

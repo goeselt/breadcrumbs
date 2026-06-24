@@ -70,8 +70,12 @@ export function renderChatDetail(
     <h2>Activity</h2>
     ${renderToolUsage(chat.tools)}
     ${renderObservedActivity(detail)}
-    ${notes.length > 0 ? `<h2>Notes</h2>
-    <ul class="notes-list">${notes.map((note) => `<li>${escapeHtml(note)}</li>`).join('')}</ul>` : ''}
+    ${
+      notes.length > 0
+        ? `<h2>Notes</h2>
+    <ul class="notes-list">${notes.map((note) => `<li>${escapeHtml(note)}</li>`).join('')}</ul>`
+        : ''
+    }
   </section>
   <section id="timeline" class="detail-section">
     <h2>Timeline</h2>

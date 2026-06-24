@@ -109,7 +109,7 @@ export function dayLineChart(
       matchAxisWidth: 60,
       interaction: { intersect: false, mode: 'index' },
       scales: {
-        y: { beginAtZero: true, ticks, ...(opts.max !== undefined ? { max: opts.max } : {}) },
+        y: { beginAtZero: true, ticks, ...(opts.max === undefined ? {} : { max: opts.max }) },
       },
       plugins: { legend: { display: false } },
     },

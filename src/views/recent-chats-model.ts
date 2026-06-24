@@ -44,9 +44,9 @@ export function recentChatQuickPickLabel(chat: ChatMetadata): {
 export function displayRecentChatTitle(chat: ChatMetadata): string {
   if (chat.title?.trim()) return chat.title.trim()
   const workspace = recentWorkspaceLabel(chat)
-  return workspace !== '(unknown)'
-    ? `${workspace} chat`
-    : `${recentProviderLabel(chat.provider)} ${truncateRecentText(chat.providerChatId, 18)}`
+  return workspace === '(unknown)'
+    ? `${recentProviderLabel(chat.provider)} ${truncateRecentText(chat.providerChatId, 18)}`
+    : `${workspace} chat`
 }
 
 export function recentWorkspaceLabel(chat: ChatMetadata): string {

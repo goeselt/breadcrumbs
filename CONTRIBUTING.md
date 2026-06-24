@@ -45,7 +45,7 @@ Lint:
 
 ```bash
 docker pull ghcr.io/goeselt/pedant:latest
-docker run --rm -v "$(pwd):/work" ghcr.io/goeselt/pedant:latest
+docker run --rm -v "$(pwd):/work" ghcr.io/goeselt/pedant:latest --fix --ignore resources/vendor/chart.umd.min.js
 ```
 
 Typecheck, test, and build:

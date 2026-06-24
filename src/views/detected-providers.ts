@@ -13,9 +13,9 @@ export function detectedProviderItems(
     const chatCount = indexed?.totals.chats
     const description = loading
       ? 'Loading...'
-      : chatCount !== undefined
-        ? `${formatNumber(chatCount)} ${chatCount === 1 ? 'chat' : 'chats'}`
-        : readinessLabel(agent.readiness.analysis.status)
+      : chatCount === undefined
+        ? readinessLabel(agent.readiness.analysis.status)
+        : `${formatNumber(chatCount)} ${chatCount === 1 ? 'chat' : 'chats'}`
     return {
       provider: agent.agent.id,
       label: agent.agent.label,

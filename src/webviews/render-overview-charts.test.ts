@@ -35,7 +35,15 @@ describe('dailyTotals', () => {
 describe('toolUsageEntries', () => {
   it('aggregates calls per tool, sorts descending, and caps at twelve', () => {
     const chats = [
-      chat({ tools: { calls: 0, byTool: [{ tool: 'edit', calls: 2 }, { tool: 'read', calls: 1 }] } }),
+      chat({
+        tools: {
+          calls: 0,
+          byTool: [
+            { tool: 'edit', calls: 2 },
+            { tool: 'read', calls: 1 },
+          ],
+        },
+      }),
       chat({ tools: { calls: 0, byTool: [{ tool: 'edit', calls: 3 }] } }),
       chat({ tools: undefined }),
     ]

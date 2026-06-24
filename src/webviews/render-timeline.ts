@@ -1,5 +1,13 @@
 import type { ChatDetailEvent, ChatDetailReport } from '../chat-detail.js'
-import { chatField, countLabel, escapeHtml, formatDuration, formatNumber, formatTimestamp, sum } from './render-primitives.js'
+import {
+  chatField,
+  countLabel,
+  escapeHtml,
+  formatDuration,
+  formatNumber,
+  formatTimestamp,
+  sum,
+} from './render-primitives.js'
 
 interface TimelinePresentation {
   event: ChatDetailEvent
@@ -233,20 +241,20 @@ function timelineInlineSummary(presentation: TimelinePresentation): string {
       : event.usage
         ? `${formatNumber(event.usage.totalTokens)} tokens`
         : '',
-    cumulativeTokens !== undefined
-      ? `${cumulativeTokensPartial ? 'Visible cumulative tokens' : 'Cumulative tokens'} ${formatNumber(cumulativeTokens)}`
-      : '',
-    event.durationMs !== undefined ? formatDuration(event.durationMs) : '',
-    event.timeToFirstTokenMs !== undefined ? `TTFT ${formatDuration(event.timeToFirstTokenMs)}` : '',
-    event.success !== undefined ? (event.success ? 'Succeeded' : 'Failed') : '',
-    detailNumber(event, 'exitCode') !== undefined ? `Exit ${formatNumber(detailNumber(event, 'exitCode')!)}` : '',
-    detailNumber(event, 'originalTokenCount') !== undefined
-      ? `${formatNumber(detailNumber(event, 'originalTokenCount')!)} output tokens`
-      : '',
+    cumulativeTokens === undefined
+      ? ''
+      : `${cumulativeTokensPartial ? 'Visible cumulative tokens' : 'Cumulative tokens'} ${formatNumber(cumulativeTokens)}`,
+    event.durationMs === undefined ? '' : formatDuration(event.durationMs),
+    event.timeToFirstTokenMs === undefined ? '' : `TTFT ${formatDuration(event.timeToFirstTokenMs)}`,
+    event.success === undefined ? '' : event.success ? 'Succeeded' : 'Failed',
+    detailNumber(event, 'exitCode') === undefined ? '' : `Exit ${formatNumber(detailNumber(event, 'exitCode')!)}`,
+    detailNumber(event, 'originalTokenCount') === undefined
+      ? ''
+      : `${formatNumber(detailNumber(event, 'originalTokenCount')!)} output tokens`,
     detailString(event, 'subagentType') ?? detailString(event, 'agentType') ?? '',
-    detailNumber(event, 'totalTokens') !== undefined
-      ? `${formatNumber(detailNumber(event, 'totalTokens')!)} agent tokens`
-      : '',
+    detailNumber(event, 'totalTokens') === undefined
+      ? ''
+      : `${formatNumber(detailNumber(event, 'totalTokens')!)} agent tokens`,
     timelineContentState(event),
   ]
   return facts.filter(Boolean).map(escapeHtml).join(' &middot; ')
@@ -270,13 +278,13 @@ function timelineEventDetailFields(presentation: TimelinePresentation): string[]
     event.kind === 'model_request' && event.usage
       ? [
           chatField('Request tokens', formatNumber(event.usage.totalTokens), true),
-          cumulativeTokens !== undefined
-            ? chatField(
+          cumulativeTokens === undefined
+            ? ''
+            : chatField(
                 cumulativeTokensPartial ? 'Visible cumulative tokens' : 'Cumulative tokens',
                 formatNumber(cumulativeTokens),
                 true,
-              )
-            : '',
+              ),
         ]
       : event.usage
         ? [
@@ -288,9 +296,9 @@ function timelineEventDetailFields(presentation: TimelinePresentation): string[]
         : []
   return [
     ...usageFields,
-    event.durationMs !== undefined ? chatField('Duration', formatDuration(event.durationMs)) : '',
-    event.timeToFirstTokenMs !== undefined ? chatField('TTFT', formatDuration(event.timeToFirstTokenMs)) : '',
-    event.success !== undefined ? chatField('Result', event.success ? 'Succeeded' : 'Failed') : '',
+    event.durationMs === undefined ? '' : chatField('Duration', formatDuration(event.durationMs)),
+    event.timeToFirstTokenMs === undefined ? '' : chatField('TTFT', formatDuration(event.timeToFirstTokenMs)),
+    event.success === undefined ? '' : chatField('Result', event.success ? 'Succeeded' : 'Failed'),
     ...eventDetailFields(event),
   ].filter(Boolean)
 }

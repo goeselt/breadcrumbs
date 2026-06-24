@@ -422,7 +422,7 @@ async function refreshNativeViews(): Promise<void> {
 
 async function refreshChatSnapshot(ctx: vscode.ExtensionContext, selection?: ChatSelection): Promise<void> {
   if (!selection || !isAgentId(selection.provider) || typeof selection.chatKey !== 'string') return
-  const provider = selection.provider
+  const { provider } = selection
   logChannel().debug(
     `command ${fields({ command: 'breadcrumbs.refreshChatSnapshot', provider, chatKey: selection.chatKey })}`,
   )

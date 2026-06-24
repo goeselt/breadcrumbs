@@ -73,18 +73,53 @@ export function renderProviderTimeline(detail: ChatDetailReport, chat: ChatMetad
     panels.push(chartPanel(title, id, iterationLineChart(values, title, colorIndex, pointNoun)))
   }
   if (chat.provider === 'claude') {
-    addCombo('signal-cache-read-chart', 'Cache read tokens', 'Cumulative', requests.map((event) => event.usage?.cachedInputTokens ?? 0), 1, 'Request')
-    addCombo('signal-cache-creation-chart', 'Cache creation tokens', 'Cumulative', requests.map((event) => event.usage?.cacheCreationInputTokens ?? 0), 2, 'Request')
+    addCombo(
+      'signal-cache-read-chart',
+      'Cache read tokens',
+      'Cumulative',
+      requests.map((event) => event.usage?.cachedInputTokens ?? 0),
+      1,
+      'Request',
+    )
+    addCombo(
+      'signal-cache-creation-chart',
+      'Cache creation tokens',
+      'Cumulative',
+      requests.map((event) => event.usage?.cacheCreationInputTokens ?? 0),
+      2,
+      'Request',
+    )
   } else if (chat.provider === 'codex') {
     const contextUsage = requests.map((event) => {
       const window = detailNumber(event, 'modelContextWindow') ?? 0
       return window > 0 ? Math.round(((event.usage?.totalTokens ?? 0) / window) * 1000) / 10 : 0
     })
     addLine('signal-context-usage-chart', 'Context window usage %', contextUsage, 4, 'Request')
-    addCombo('signal-model-duration-chart', 'Model duration (ms)', 'Cumulative ms', turns.map((event) => event.durationMs ?? 0), 0, 'Turn')
+    addCombo(
+      'signal-model-duration-chart',
+      'Model duration (ms)',
+      'Cumulative ms',
+      turns.map((event) => event.durationMs ?? 0),
+      0,
+      'Turn',
+    )
   } else {
-    addCombo('signal-output-chart', 'Output tokens', 'Cumulative', requests.map((event) => event.usage?.outputTokens ?? 0), 0, 'Request')
-    addCombo('signal-cache-read-chart', 'Cache read tokens', 'Cumulative', requests.map((event) => event.usage?.cachedInputTokens ?? 0), 1, 'Request')
+    addCombo(
+      'signal-output-chart',
+      'Output tokens',
+      'Cumulative',
+      requests.map((event) => event.usage?.outputTokens ?? 0),
+      0,
+      'Request',
+    )
+    addCombo(
+      'signal-cache-read-chart',
+      'Cache read tokens',
+      'Cumulative',
+      requests.map((event) => event.usage?.cachedInputTokens ?? 0),
+      1,
+      'Request',
+    )
   }
   if (!tokenUsage && panels.length === 0) return ''
   return `<h2>Signals over iterations</h2>

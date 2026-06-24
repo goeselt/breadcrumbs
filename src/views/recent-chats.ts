@@ -32,7 +32,6 @@ export class RecentChatsTreeProvider implements vscode.TreeDataProvider<RecentCh
   constructor(private readonly loadChats: () => Promise<ChatMetadata[]>) {}
 
   refresh(): void {
-    // eslint-disable-next-line unicorn/no-useless-undefined -- vscode.EventEmitter#fire requires an explicit argument
     this.changed.fire(undefined)
   }
 

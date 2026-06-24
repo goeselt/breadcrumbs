@@ -197,8 +197,7 @@ describe('indexed chat metadata', () => {
     await writeFile(source, '{"id":"a"}\n')
 
     let summarizeCalls = 0
-    const project = (record: Record<string, unknown>) =>
-      typeof record.id === 'string' ? { id: record.id } : undefined
+    const project = (record: Record<string, unknown>) => (typeof record.id === 'string' ? { id: record.id } : undefined)
     const summarize = (_file: string, state: { records: { id: string }[] }) => {
       summarizeCalls += 1
       return state.records.map((record) => ({ id: record.id }) as unknown as ChatMetadata)

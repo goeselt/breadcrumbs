@@ -22,7 +22,9 @@ function chat(workspace: string, totalTokens: number): ChatMetadata {
 describe('cacheShare', () => {
   it('uses input as the denominator when cached is a subset of input', () => {
     const semantics = 'cached_input_is_a_subset_of_input'
-    expect(cacheShare(tokens({ inputTokens: 100, cachedInputTokens: 40, totalTokenSemantics: semantics }))).toBe('40.0%')
+    expect(cacheShare(tokens({ inputTokens: 100, cachedInputTokens: 40, totalTokenSemantics: semantics }))).toBe(
+      '40.0%',
+    )
   })
 
   it('sums the input components when cached is reported separately', () => {
@@ -36,7 +38,10 @@ describe('cacheShare', () => {
 
 describe('tokenComponents', () => {
   it('treats cached input as a subset for Codex (non-overlapping buckets)', () => {
-    const { prompt, completion } = tokenComponents('codex', tokens({ inputTokens: 10, cachedInputTokens: 4, outputTokens: 6, reasoningOutputTokens: 2 }))
+    const { prompt, completion } = tokenComponents(
+      'codex',
+      tokens({ inputTokens: 10, cachedInputTokens: 4, outputTokens: 6, reasoningOutputTokens: 2 }),
+    )
     expect(prompt).toEqual([
       ['Uncached input', 6],
       ['Cached input', 4],
@@ -48,7 +53,10 @@ describe('tokenComponents', () => {
   })
 
   it('keeps cache read and creation separate for Claude', () => {
-    const { prompt } = tokenComponents('claude', tokens({ inputTokens: 10, cachedInputTokens: 4, cacheCreationInputTokens: 2 }))
+    const { prompt } = tokenComponents(
+      'claude',
+      tokens({ inputTokens: 10, cachedInputTokens: 4, cacheCreationInputTokens: 2 }),
+    )
     expect(prompt).toEqual([
       ['Uncached input', 10],
       ['Cache read', 4],

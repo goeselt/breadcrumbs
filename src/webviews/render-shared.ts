@@ -1,7 +1,15 @@
 import type { AgentId } from '../agent.js'
 import type { ChatMetadata, ChatMetadataReport, TokenUsage } from '../chat-metadata.js'
 import { singleBarChart } from './render-charts.js'
-import { chartPanel, escapeHtml, formatNumber, formatPercent, metric, providerLabel, workspaceLabel } from './render-primitives.js'
+import {
+  chartPanel,
+  escapeHtml,
+  formatNumber,
+  formatPercent,
+  metric,
+  providerLabel,
+  workspaceLabel,
+} from './render-primitives.js'
 import type { ProviderReportResult } from './types.js'
 
 /** Total tokens summed per workspace, descending, capped to `limit` entries. */

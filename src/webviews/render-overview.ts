@@ -201,10 +201,29 @@ function renderProviderCharts(provider: AgentId, report: ChatMetadataReport): st
 
   return `<h2>Usage charts</h2>
   <div class="chart-grid">
-    ${chartPanel('Daily tokens', 'daily-tokens-chart', dayLineChart(dayLabels, dailyTotals(report.chats, dayLabels, (chat) => chat.tokens.totalTokens), 'Total tokens', 0, { compact: true }))}
+    ${chartPanel(
+      'Daily tokens',
+      'daily-tokens-chart',
+      dayLineChart(
+        dayLabels,
+        dailyTotals(report.chats, dayLabels, (chat) => chat.tokens.totalTokens),
+        'Total tokens',
+        0,
+        { compact: true },
+      ),
+    )}
   </div>
   <div class="chart-grid">
-    ${chartPanel('Daily requests', 'daily-requests-chart', dayLineChart(dayLabels, dailyTotals(report.chats, dayLabels, (chat) => chat.requests), 'Requests', 3))}
+    ${chartPanel(
+      'Daily requests',
+      'daily-requests-chart',
+      dayLineChart(
+        dayLabels,
+        dailyTotals(report.chats, dayLabels, (chat) => chat.requests),
+        'Requests',
+        3,
+      ),
+    )}
   </div>
   ${
     reasoningConfig
