@@ -78,7 +78,11 @@ describe('report Webview HTML', () => {
     report.chats[0].models[0].model = payload
     report.chats[0].workspacePaths = [`/repo/${payload}`]
 
-    const html = renderReportHtml('overview', { providers: [{ provider: 'codex', report }], selectedProvider: 'codex' }, 'nonce-value')
+    const html = renderReportHtml(
+      'overview',
+      { providers: [{ provider: 'codex', report }], selectedProvider: 'codex' },
+      'nonce-value',
+    )
 
     // Charts render, so the payload really does reach the chart-config templates.
     expect(html).toContain('model-token-chart')
@@ -182,7 +186,7 @@ describe('report Webview HTML', () => {
         {
           agent: {
             id: 'copilot',
-            label: 'GitHub Copilot Chat',
+            label: 'GitHub Copilot',
             extensionIds: ['GitHub.copilot-chat'],
             relevantSettings: [],
             expectedSources: ['trace-database'],
@@ -271,7 +275,7 @@ describe('report Webview HTML', () => {
         {
           agent: {
             id: 'copilot' as const,
-            label: 'GitHub Copilot Chat',
+            label: 'GitHub Copilot',
             extensionIds: ['GitHub.copilot-chat'],
             relevantSettings: [],
             expectedSources: ['trace-database' as const],

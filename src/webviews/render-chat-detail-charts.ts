@@ -49,8 +49,8 @@ export function renderObservedActivity(detail: ChatDetailReport): string {
 }
 
 /**
- * Per-iteration development charts: total request tokens (lead, full width) followed by the most
- * informative per-provider signals across model iterations.
+ * Per-iteration development charts: total request tokens (lead, full width) followed by the most informative
+ * per-provider signals across model iterations.
  */
 export function renderProviderTimeline(detail: ChatDetailReport, chat: ChatMetadata): string {
   const requests = detail.timeline.filter((event) => event.kind === 'model_request' && event.usage)

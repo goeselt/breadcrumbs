@@ -18,8 +18,8 @@ import {
 
 const SUMMARY_SCHEMA_VERSION = 1
 /**
- * Bump when the summarized {@link ChatMetadata} shape or the shared summarization changes in a way
- * that an adapter `parserVersion` bump does not already capture. Guards reuse of cached summaries.
+ * Bump when the summarized {@link ChatMetadata} shape or the shared summarization changes in a way that an adapter
+ * `parserVersion` bump does not already capture. Guards reuse of cached summaries.
  */
 const SUMMARY_FORMAT_VERSION = 1
 
@@ -202,8 +202,8 @@ export async function refreshIndexedFiles<T>(
 }
 
 /**
- * Returns the summarized chats for a refreshed file, reusing the persisted summary when the source
- * is unchanged so the per-record summarization is skipped on warm loads.
+ * Returns the summarized chats for a refreshed file, reusing the persisted summary when the source is unchanged so the
+ * per-record summarization is skipped on warm loads.
  */
 async function summarizeWithCache<T>(
   summaryFile: string,

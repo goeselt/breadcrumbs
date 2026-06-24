@@ -4,9 +4,10 @@ let channel: vscode.LogOutputChannel | undefined
 
 /**
  * The structured diagnostic log, separate from the human-triggered "Breadcrumbs" report dumps.
- * Shows up as its own entry in the Output view's channel dropdown. Verbosity is controlled by
- * the user via "Developer: Set Log Level..." -> Breadcrumbs Log, so call sites can log liberally
- * at `trace`/`debug` without flooding the default view (which only shows `info` and above).
+ * Shows up as its own entry in the Output view's channel dropdown.
+ * Verbosity is controlled by the user via "Developer: Set Log Level..." -> Breadcrumbs Log,
+ * so call sites can log liberally at `trace`/`debug` without flooding the default view
+ * (which only shows `info` and above).
  */
 export function logChannel(): vscode.LogOutputChannel {
   channel ??= vscode.window.createOutputChannel('Breadcrumbs Log', { log: true })
@@ -19,9 +20,8 @@ export function disposeLogChannel(): void {
 }
 
 /**
- * Formats a fields object as logfmt-style `key=value` pairs for greppable, structurally
- * consistent log lines. Undefined values are omitted; values containing whitespace or quotes
- * are JSON-quoted.
+ * Formats a fields object as logfmt-style `key=value` pairs for greppable, structurally consistent log lines.
+ * Undefined values are omitted; values containing whitespace or quotes are JSON-quoted.
  */
 export function fields(values: Record<string, unknown>): string {
   return Object.entries(values)

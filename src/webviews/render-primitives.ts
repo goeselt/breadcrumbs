@@ -107,7 +107,10 @@ export function chartColor(index: number, alpha = 0.88): string {
 /** Empty-state message with optional next-step command links so the view is not a dead end. */
 export function emptyState(message: string, actions: Array<{ label: string; command: string }> = []): string {
   const links = actions
-    .map((action) => `<a class="empty-action" href="command:${escapeHtml(action.command)}">${escapeHtml(action.label)}</a>`)
+    .map(
+      (action) =>
+        `<a class="empty-action" href="command:${escapeHtml(action.command)}">${escapeHtml(action.label)}</a>`,
+    )
     .join('')
   return `<div class="empty">${escapeHtml(message)}${actions.length > 0 ? `<div class="empty-actions">${links}</div>` : ''}</div>`
 }
@@ -138,7 +141,7 @@ export function chatField(label: string, value: string, numeric = false): string
 }
 
 export function providerLabel(provider: AgentId): string {
-  if (provider === 'copilot') return 'GitHub Copilot Chat'
+  if (provider === 'copilot') return 'GitHub Copilot'
   if (provider === 'codex') return 'Codex'
   return 'Claude Code'
 }

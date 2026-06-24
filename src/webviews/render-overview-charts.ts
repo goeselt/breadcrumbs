@@ -74,8 +74,8 @@ export function dailyTotals(chats: ChatMetadata[], labels: string[], pick: (chat
 
 /**
  * Single-axis day line chart shared by every time series (tokens, requests, reasoning %, cache %).
- * Using one chart type and one left y-axis (pinned by matchAxisWidth) keeps the day scale identical
- * across the stacked charts -- mixing bar and line types offsets the category axis differently.
+ * Using one chart type and one left y-axis (pinned by matchAxisWidth) keeps the day scale identical across the
+ * stacked charts -- mixing bar and line types offsets the category axis differently.
  */
 export function dayLineChart(
   labels: string[],

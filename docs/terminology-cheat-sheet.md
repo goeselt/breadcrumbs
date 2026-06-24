@@ -25,7 +25,7 @@ The product or runtime that produced the source data.
 
 Breadcrumbs currently uses:
 
-- `copilot`: GitHub Copilot Chat and the integrated Visual Studio Code chat runtime.
+- `copilot`: GitHub Copilot and the integrated Visual Studio Code chat runtime.
 - `codex`: OpenAI Codex, including sessions used through `openai.chatgpt`.
 - `claude`: Anthropic Claude Code, including sessions used through `anthropic.claude-code`.
 

@@ -72,8 +72,8 @@ export function providerTokenMetrics(provider: AgentId, tokens: ChatMetadataRepo
 }
 
 /**
- * Non-overlapping prompt/completion token buckets. For Codex, cachedInputTokens is a subset of
- * inputTokens, and reasoningOutputTokens is a subset of outputTokens for every provider.
+ * Non-overlapping prompt/completion token buckets. For Codex, cachedInputTokens is a subset of inputTokens,
+ * and reasoningOutputTokens is a subset of outputTokens for every provider.
  */
 export function tokenComponents(
   provider: AgentId,

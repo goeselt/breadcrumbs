@@ -1,8 +1,8 @@
 /**
  * Extension entry point -- the VS Code glue layer.
  *
- * Owns no parsing logic. It wires VS Code to the testable core (`src/index`, `src/adapters`,
- * `src/chat-*`) and holds the runtime state the views read from. Sections below, in order:
+ * Owns no parsing logic. It wires VS Code to the testable core (`src/index`, `src/adapters`, `src/chat-*`) and
+ * holds the runtime state the views read from. Sections below, in order:
  *   - Module state
  *   - Activation & lifecycle
  *   - Provider report store (in-memory, incremental refresh)
@@ -27,15 +27,16 @@ import { SourcesTreeProvider } from './views/sources-tree.js'
 import type { ProviderReportResult, ReportViewData } from './webviews/report-html.js'
 import { ReportPanelManager } from './webviews/report-panels.js'
 
-// === Module state ===
+// -- Module state -----------------------------------------------------------------------------------------------------
+
 let output: vscode.OutputChannel | undefined
 const indexedProviders = new Set<AgentId>()
 const refreshTimers = new Map<AgentId, NodeJS.Timeout>()
 const providerReports = new Map<AgentId, ProviderReportResult>()
 const providerLoads = new Map<AgentId, Promise<ProviderReportResult>>()
-// Session-scoped cache of rendered chat-detail snapshots. Not persisted: detail views can contain
-// captured prompts and secrets, which must not be written to disk. Cleared whenever an index refresh
-// could have changed the underlying chats.
+// Session-scoped cache of rendered chat-detail snapshots.
+// Not persisted: detail views can contain captured prompts and secrets, which must not be written to disk.
+// Cleared whenever an index refresh could have changed the underlying chats.
 const chatDetailCache = new Map<string, ChatDetailReport>()
 let discoveryReport: DiscoveryReport | undefined
 let reportPanels: ReportPanelManager | undefined
@@ -53,7 +54,8 @@ const PROVIDERS: AgentId[] = ['copilot', 'codex', 'claude']
 const COPILOT_SETTINGS = new Set(AGENTS.find((agent) => agent.id === 'copilot')?.relevantSettings ?? [])
 let metadataWatcher: vscode.Disposable | undefined
 
-// === Activation & lifecycle ===
+// -- Activation & lifecycle -------------------------------------------------------------------------------------------
+
 export function activate(ctx: vscode.ExtensionContext) {
   const log = logChannel()
   log.info(`activate ${fields({ storageRoot: ctx.globalStorageUri.fsPath })}`)
@@ -201,7 +203,8 @@ export function deactivate() {
   disposeLogChannel()
 }
 
-// === Provider report store (in-memory, incremental refresh) ===
+// -- Provider report store (in-memory, incremental refresh) -----------------------------------------------------------
+
 async function refreshProvider(
   ctx: vscode.ExtensionContext,
   provider: AgentId,
@@ -295,7 +298,8 @@ function refreshProviderResult(
   return load
 }
 
-// === Webview report data ===
+// -- Webview report data ----------------------------------------------------------------------------------------------
+
 async function loadReportView(
   ctx: vscode.ExtensionContext,
   kind: ReportViewKind,
@@ -364,7 +368,8 @@ async function openChatDetail(selection?: { provider?: AgentId; chatKey?: string
   await reportPanels?.open('chatDetail', metadata.provider, metadata.chatKey)
 }
 
-// === Native tree views & chat commands ===
+// -- Native tree views & chat commands --------------------------------------------------------------------------------
+
 async function loadDetectedProviders() {
   const discovery = discoveryReport ?? (await refreshDiscovery())
   return detectedProviderItems(discovery, providerReports)
@@ -412,7 +417,7 @@ async function filterRecentChats(): Promise<void> {
   logChannel().debug(`command ${fields({ command: 'breadcrumbs.filterRecentChats' })}`)
   const choices: Array<vscode.QuickPickItem & { provider?: AgentId }> = [
     { label: 'All Providers' },
-    { label: 'GitHub Copilot Chat', provider: 'copilot' },
+    { label: 'GitHub Copilot', provider: 'copilot' },
     { label: 'Codex', provider: 'codex' },
     { label: 'Claude Code', provider: 'claude' },
   ]
@@ -457,7 +462,8 @@ async function refreshChatSnapshot(ctx: vscode.ExtensionContext, selection?: Cha
   )
 }
 
-// === Shared helpers ===
+// -- Shared helpers ---------------------------------------------------------------------------------------------------
+
 async function refreshDiscovery(): Promise<DiscoveryReport> {
   discoveryReport = await discoverAgentSources()
   return discoveryReport
@@ -474,7 +480,7 @@ function orderedProviderReports(): ProviderReportResult[] {
 }
 
 function providerLabel(provider: AgentId): string {
-  if (provider === 'copilot') return 'GitHub Copilot Chat'
+  if (provider === 'copilot') return 'GitHub Copilot'
   if (provider === 'codex') return 'Codex'
   return 'Claude Code'
 }
