@@ -1,7 +1,7 @@
 # Breadcrumbs
 
-Visual Studio Code extension for inspecting local coding-agent activity and token usage. It reads GitHub Copilot Chat,
-OpenAI Codex, and Anthropic Claude Code data already on disk and never uploads it.
+Visual Studio Code extension for inspecting local coding-agent activity and token usage. It reads GitHub Copilot, OpenAI
+Codex, and Anthropic Claude Code data already on disk and never uploads it.
 
 > [!WARNING]
 >

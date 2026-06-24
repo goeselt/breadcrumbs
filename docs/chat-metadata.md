@@ -11,8 +11,8 @@ This document describes the metadata-only chat list implemented by:
 ## Boundary
 
 `CodeQL` is a workload or agent task executed through Visual Studio Code Chat. The provider represented by the adapter
-is `copilot`, because the observed records are emitted by GitHub Copilot Chat. CodeQL-specific attribution is not
-available in the current metadata unless Copilot emits a stable agent/tool identifier for it.
+is `copilot`, because the observed records are emitted by GitHub Copilot. CodeQL-specific attribution is not available
+in the current metadata unless Copilot emits a stable agent/tool identifier for it.
 
 The adapters parse content-bearing JSON records but keep only explicitly selected metadata in memory after each record.
 Reports never emit prompt text, response text, tool arguments, tool results, diffs, or file content. A

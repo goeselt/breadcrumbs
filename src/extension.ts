@@ -1,10 +1,20 @@
+/**
+ * Extension entry point -- the VS Code glue layer.
+ *
+ * Owns no parsing logic. It wires VS Code to the testable core (`src/index`, `src/adapters`, `src/chat-*`) and
+ * holds the runtime state the views read from. Sections below, in order:
+ *   - Module state
+ *   - Activation & lifecycle
+ *   - Provider report store (in-memory, incremental refresh)
+ *   - Webview report data
+ *   - Native tree views & chat commands
+ *   - Shared helpers
+ */
 import * as vscode from 'vscode'
-import { homedir } from 'node:os'
 import { AGENTS, type AgentId } from './agent.js'
 import { readIndexedChatDetail } from './adapters/chat-detail.js'
-import type { ContentMode } from './chat-detail.js'
+import type { ChatDetailReport } from './chat-detail.js'
 import { discoverAgentSources, type DiscoveryReport } from './discovery.js'
-import { createMetadataExport, metadataExportFileName, type MetadataExportSelection } from './metadata-export.js'
 import { readIndexedChatMetadata } from './index/chat-metadata-index.js'
 import { createMetadataIndexWatchers } from './index/watch.js'
 import { disposeLogChannel, fields, logChannel } from './log.js'
@@ -17,11 +27,17 @@ import { SourcesTreeProvider } from './views/sources-tree.js'
 import type { ProviderReportResult, ReportViewData } from './webviews/report-html.js'
 import { ReportPanelManager } from './webviews/report-panels.js'
 
+// -- Module state -----------------------------------------------------------------------------------------------------
+
 let output: vscode.OutputChannel | undefined
 const indexedProviders = new Set<AgentId>()
 const refreshTimers = new Map<AgentId, NodeJS.Timeout>()
 const providerReports = new Map<AgentId, ProviderReportResult>()
 const providerLoads = new Map<AgentId, Promise<ProviderReportResult>>()
+// Session-scoped cache of rendered chat-detail snapshots.
+// Not persisted: detail views can contain captured prompts and secrets, which must not be written to disk.
+// Cleared whenever an index refresh could have changed the underlying chats.
+const chatDetailCache = new Map<string, ChatDetailReport>()
 let discoveryReport: DiscoveryReport | undefined
 let reportPanels: ReportPanelManager | undefined
 let reportTree: ReportTreeProvider | undefined
@@ -29,15 +45,22 @@ let recentChatsTree: RecentChatsTreeProvider | undefined
 let recentChatsView: vscode.TreeView<unknown> | undefined
 let sourcesTree: SourcesTreeProvider | undefined
 
+interface ChatSelection {
+  provider?: AgentId
+  chatKey?: string
+}
+
 const PROVIDERS: AgentId[] = ['copilot', 'codex', 'claude']
 const COPILOT_SETTINGS = new Set(AGENTS.find((agent) => agent.id === 'copilot')?.relevantSettings ?? [])
 let metadataWatcher: vscode.Disposable | undefined
 
+// -- Activation & lifecycle -------------------------------------------------------------------------------------------
+
 export function activate(ctx: vscode.ExtensionContext) {
   const log = logChannel()
   log.info(`activate ${fields({ storageRoot: ctx.globalStorageUri.fsPath })}`)
-  reportPanels = new ReportPanelManager((kind, selectedProvider, selectedChatKey, selectedContentMode) =>
-    loadReportView(ctx, kind, selectedProvider, selectedChatKey, selectedContentMode),
+  reportPanels = new ReportPanelManager((kind, selectedProvider, selectedChatKey) =>
+    loadReportView(ctx, kind, selectedProvider, selectedChatKey),
   )
   reportTree = new ReportTreeProvider(loadDetectedProviders)
   recentChatsTree = new RecentChatsTreeProvider(() => loadRecentChats(ctx))
@@ -109,7 +132,7 @@ export function activate(ctx: vscode.ExtensionContext) {
     ),
     vscode.commands.registerCommand(
       'breadcrumbs.openChatDetail',
-      (selection?: { provider?: AgentId; chatKey?: string; contentMode?: ContentMode }) => openChatDetail(selection),
+      (selection?: { provider?: AgentId; chatKey?: string }) => openChatDetail(selection),
     ),
     vscode.commands.registerCommand('breadcrumbs.openSources', () => reportPanels?.open('sources')),
     vscode.commands.registerCommand('breadcrumbs.openCopilotSetting', (selection?: { setting?: string }) =>
@@ -117,10 +140,7 @@ export function activate(ctx: vscode.ExtensionContext) {
     ),
     vscode.commands.registerCommand('breadcrumbs.openChatQuickPick', () => openChatQuickPick(ctx)),
     vscode.commands.registerCommand('breadcrumbs.filterRecentChats', () => filterRecentChats()),
-    vscode.commands.registerCommand('breadcrumbs.exportMetadataJson', (selection?: MetadataExportSelection) =>
-      exportMetadataJson(ctx, selection),
-    ),
-    vscode.commands.registerCommand('breadcrumbs.refreshChatSnapshot', (selection?: MetadataExportSelection) =>
+    vscode.commands.registerCommand('breadcrumbs.refreshChatSnapshot', (selection?: ChatSelection) =>
       refreshChatSnapshot(ctx, selection),
     ),
     vscode.commands.registerCommand('breadcrumbs.refreshIndex', async () => {
@@ -169,6 +189,7 @@ export function deactivate() {
   indexedProviders.clear()
   providerReports.clear()
   providerLoads.clear()
+  chatDetailCache.clear()
   discoveryReport = undefined
   metadataWatcher?.dispose()
   metadataWatcher = undefined
@@ -181,6 +202,8 @@ export function deactivate() {
   output = undefined
   disposeLogChannel()
 }
+
+// -- Provider report store (in-memory, incremental refresh) -----------------------------------------------------------
 
 async function refreshProvider(
   ctx: vscode.ExtensionContext,
@@ -249,6 +272,7 @@ function refreshProviderResult(
 
   const load = (async () => {
     const previous = providerReports.get(provider)?.report
+    chatDetailCache.clear()
     providerReports.set(provider, { provider, report: previous, loading: true })
     try {
       const report = await refreshProvider(ctx, provider, signal, markInitialized)
@@ -274,12 +298,13 @@ function refreshProviderResult(
   return load
 }
 
+// -- Webview report data ----------------------------------------------------------------------------------------------
+
 async function loadReportView(
   ctx: vscode.ExtensionContext,
   kind: ReportViewKind,
   selectedProvider?: AgentId,
   selectedChatKey?: string,
-  selectedContentMode?: ContentMode,
 ): Promise<ReportViewData> {
   if (kind === 'sources') {
     return {
@@ -298,17 +323,22 @@ async function loadReportView(
     if (!metadata) {
       throw new Error('The selected chat is no longer present in the usage index.')
     }
-    const contentMode = vscode.workspace.isTrusted ? (selectedContentMode ?? 'all') : 'none'
+    const cacheKey = `${metadata.provider}:${metadata.chatKey}`
+    let chatDetail = chatDetailCache.get(cacheKey)
+    if (!chatDetail) {
+      chatDetail = await readIndexedChatDetail(metadata, {
+        contentMode: vscode.workspace.isTrusted ? 'all' : 'none',
+        maxContentChars: 500,
+        maxEvents: 300,
+      })
+      chatDetailCache.set(cacheKey, chatDetail)
+    }
     return {
       discovery: discoveryReport,
       providers: orderedProviderReports(),
       selectedProvider: metadata.provider,
       selectedChatKey: metadata.chatKey,
-      chatDetail: await readIndexedChatDetail(metadata, {
-        contentMode,
-        maxContentChars: 2_000,
-        maxEvents: 300,
-      }),
+      chatDetail,
       chatDetailNavigation: 'command',
       chatDetailContentEnabled: vscode.workspace.isTrusted,
     }
@@ -321,13 +351,8 @@ async function loadReportView(
   }
 }
 
-async function openChatDetail(selection?: {
-  provider?: AgentId
-  chatKey?: string
-  contentMode?: ContentMode
-}): Promise<void> {
+async function openChatDetail(selection?: { provider?: AgentId; chatKey?: string }): Promise<void> {
   if (!selection || !isAgentId(selection.provider) || typeof selection.chatKey !== 'string') return
-  if (selection.contentMode !== undefined && !isContentMode(selection.contentMode)) return
   const log = logChannel()
   log.debug(
     `command ${fields({ command: 'breadcrumbs.openChatDetail', provider: selection.provider, chatKey: selection.chatKey })}`,
@@ -340,13 +365,10 @@ async function openChatDetail(selection?: {
     await vscode.window.showWarningMessage('Breadcrumbs could not find that chat in the current index.')
     return
   }
-  await reportPanels?.open(
-    'chatDetail',
-    metadata.provider,
-    metadata.chatKey,
-    vscode.workspace.isTrusted ? (selection.contentMode ?? 'all') : 'none',
-  )
+  await reportPanels?.open('chatDetail', metadata.provider, metadata.chatKey)
 }
+
+// -- Native tree views & chat commands --------------------------------------------------------------------------------
 
 async function loadDetectedProviders() {
   const discovery = discoveryReport ?? (await refreshDiscovery())
@@ -388,7 +410,6 @@ async function openChatQuickPick(ctx: vscode.ExtensionContext): Promise<void> {
   await openChatDetail({
     provider: selected.chat.provider,
     chatKey: selected.chat.chatKey,
-    contentMode: 'all',
   })
 }
 
@@ -396,7 +417,7 @@ async function filterRecentChats(): Promise<void> {
   logChannel().debug(`command ${fields({ command: 'breadcrumbs.filterRecentChats' })}`)
   const choices: Array<vscode.QuickPickItem & { provider?: AgentId }> = [
     { label: 'All Providers' },
-    { label: 'GitHub Copilot Chat', provider: 'copilot' },
+    { label: 'GitHub Copilot', provider: 'copilot' },
     { label: 'Codex', provider: 'codex' },
     { label: 'Claude Code', provider: 'claude' },
   ]
@@ -421,44 +442,27 @@ async function refreshNativeViews(): Promise<void> {
   await vscode.commands.executeCommand('setContext', 'breadcrumbs.hasChats', hasChats)
 }
 
-async function exportMetadataJson(ctx: vscode.ExtensionContext, selection?: MetadataExportSelection): Promise<void> {
-  logChannel().debug(`command ${fields({ command: 'breadcrumbs.exportMetadataJson', provider: selection?.provider })}`)
-  if (selection) await ensureProviderLoaded(ctx, selection.provider)
-  else await Promise.all(PROVIDERS.map((provider) => ensureProviderLoaded(ctx, provider)))
-  await refreshNativeViews()
-  const exported = createMetadataExport(orderedProviderReports(), selection)
-  const base = vscode.workspace.workspaceFolders?.[0]?.uri ?? vscode.Uri.file(homedir())
-  const target = await vscode.window.showSaveDialog({
-    defaultUri: vscode.Uri.joinPath(base, metadataExportFileName(selection)),
-    filters: { JSON: ['json'] },
-    saveLabel: 'Export Breadcrumbs Metadata',
-  })
-  if (!target) return
-  await vscode.workspace.fs.writeFile(target, new TextEncoder().encode(`${JSON.stringify(exported, null, 2)}\n`))
-  logChannel().info(
-    `command ${fields({ command: 'breadcrumbs.exportMetadataJson', action: 'written', path: target.fsPath })}`,
-  )
-  await vscode.window.showInformationMessage(`Breadcrumbs metadata exported to ${target.fsPath}.`)
-}
-
-async function refreshChatSnapshot(ctx: vscode.ExtensionContext, selection?: MetadataExportSelection): Promise<void> {
+async function refreshChatSnapshot(ctx: vscode.ExtensionContext, selection?: ChatSelection): Promise<void> {
   if (!selection || !isAgentId(selection.provider) || typeof selection.chatKey !== 'string') return
+  const { provider } = selection
   logChannel().debug(
-    `command ${fields({ command: 'breadcrumbs.refreshChatSnapshot', provider: selection.provider, chatKey: selection.chatKey })}`,
+    `command ${fields({ command: 'breadcrumbs.refreshChatSnapshot', provider, chatKey: selection.chatKey })}`,
   )
   await vscode.window.withProgress(
     {
       location: vscode.ProgressLocation.Notification,
-      title: `Breadcrumbs: Refreshing ${providerLabel(selection.provider)} chat snapshot`,
+      title: `Breadcrumbs: Refreshing ${providerLabel(provider)} chat snapshot`,
       cancellable: false,
     },
     async () => {
-      await refreshProviderResult(ctx, selection.provider, undefined, true)
+      await refreshProviderResult(ctx, provider, undefined, true)
       await refreshNativeViews()
       await reportPanels?.refresh('chatDetail')
     },
   )
 }
+
+// -- Shared helpers ---------------------------------------------------------------------------------------------------
 
 async function refreshDiscovery(): Promise<DiscoveryReport> {
   discoveryReport = await discoverAgentSources()
@@ -476,7 +480,7 @@ function orderedProviderReports(): ProviderReportResult[] {
 }
 
 function providerLabel(provider: AgentId): string {
-  if (provider === 'copilot') return 'GitHub Copilot Chat'
+  if (provider === 'copilot') return 'GitHub Copilot'
   if (provider === 'codex') return 'Codex'
   return 'Claude Code'
 }
@@ -488,10 +492,6 @@ function findIndexedChat(provider: AgentId | undefined, chatKey: string | undefi
 
 function isAgentId(value: unknown): value is AgentId {
   return value === 'copilot' || value === 'codex' || value === 'claude'
-}
-
-function isContentMode(value: unknown): value is ContentMode {
-  return value === 'none' || value === 'messages' || value === 'tools' || value === 'all'
 }
 
 function enabled(): boolean {

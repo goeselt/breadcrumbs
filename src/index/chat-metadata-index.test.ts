@@ -5,6 +5,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it } from 'vitest'
 import { readIndexedChatDetail } from '../adapters/chat-detail.js'
 import { SOURCE_FORMATS } from '../adapters/registry.js'
+import type { ChatMetadata } from '../chat-metadata.js'
 import { readIndexedChatMetadata, refreshIndexedFiles } from './chat-metadata-index.js'
 
 const temporaryDirectories: string[] = []
@@ -46,6 +47,8 @@ describe('indexed chat metadata', () => {
     expect(first.chats[0].tokens.totalTokens).toBe(12)
     const cache = path.join(storageRoot, 'schema-1', 'codex', `${first.chats[0].sourceId}.json`)
     expect(await readFile(cache, 'utf8')).not.toContain('DO NOT PERSIST THIS SECRET')
+    const summaryCache = path.join(storageRoot, 'schema-1', 'codex', `${first.chats[0].sourceId}.summary.json`)
+    expect(await readFile(summaryCache, 'utf8')).not.toContain('DO NOT PERSIST THIS SECRET')
 
     await appendFile(source, `${JSON.stringify(usageRecord('2026-01-01T00:00:03.000Z', 25, 5))}\n`)
     const second = await readIndexedChatMetadata('codex', {
@@ -153,6 +156,83 @@ describe('indexed chat metadata', () => {
         warnings: ['synthetic parser failure'],
       },
     })
+  })
+
+  it('reuses the cached summary for unchanged files and re-summarizes on change', async () => {
+    const directory = await fixtureDirectory()
+    const storageRoot = path.join(directory, 'index')
+    const source = path.join(directory, 'session.jsonl')
+    await writeFile(source, '{"id":"a"}\n')
+
+    let summarizeCalls = 0
+    const indexOptions = {
+      parserVersion: 1,
+      project: (record: Record<string, unknown>) => (typeof record.id === 'string' ? { id: record.id } : undefined),
+    }
+    const summarize = (_file: string, state: { records: { id: string }[] }) => {
+      summarizeCalls += 1
+      return state.records.map((record) => ({ id: record.id }) as unknown as ChatMetadata)
+    }
+
+    const first = await refreshIndexedFiles([source], storageRoot, indexOptions, summarize)
+    expect(first[0].mode).toBe('rebuild')
+    expect(summarizeCalls).toBe(1)
+
+    const second = await refreshIndexedFiles([source], storageRoot, indexOptions, summarize)
+    expect(second[0].mode).toBe('unchanged')
+    expect(summarizeCalls).toBe(1)
+    expect(second[0].chats).toEqual(first[0].chats)
+
+    await appendFile(source, '{"id":"b"}\n')
+    const third = await refreshIndexedFiles([source], storageRoot, indexOptions, summarize)
+    expect(third[0].mode).toBe('append')
+    expect(summarizeCalls).toBe(2)
+    expect(third[0].chats).toHaveLength(2)
+  })
+
+  it('invalidates the cached summary when the parser version changes', async () => {
+    const directory = await fixtureDirectory()
+    const storageRoot = path.join(directory, 'index')
+    const source = path.join(directory, 'session.jsonl')
+    await writeFile(source, '{"id":"a"}\n')
+
+    let summarizeCalls = 0
+    const project = (record: Record<string, unknown>) => (typeof record.id === 'string' ? { id: record.id } : undefined)
+    const summarize = (_file: string, state: { records: { id: string }[] }) => {
+      summarizeCalls += 1
+      return state.records.map((record) => ({ id: record.id }) as unknown as ChatMetadata)
+    }
+
+    await refreshIndexedFiles([source], storageRoot, { parserVersion: 1, project }, summarize)
+    const second = await refreshIndexedFiles([source], storageRoot, { parserVersion: 2, project }, summarize)
+    expect(second[0].mode).toBe('rebuild')
+    expect(summarizeCalls).toBe(2)
+  })
+
+  it('skips a source that exceeds the byte limit instead of reading it into memory', async () => {
+    const directory = await fixtureDirectory()
+    const storageRoot = path.join(directory, 'index')
+    const source = path.join(directory, 'oversized.jsonl')
+    await writeFile(source, `{"id":"${'x'.repeat(200)}"}\n`)
+
+    let summarizeCalls = 0
+    const results = await refreshIndexedFiles(
+      [source],
+      storageRoot,
+      {
+        parserVersion: 1,
+        maxSourceBytes: 32,
+        project: (record) => (typeof record.id === 'string' ? { id: record.id } : undefined),
+      },
+      () => {
+        summarizeCalls += 1
+        return []
+      },
+    )
+
+    expect(results[0]).toMatchObject({ mode: 'stale', chats: [] })
+    expect(results[0].warning).toContain('indexing limit')
+    expect(summarizeCalls).toBe(0)
   })
 
   it('falls back to Copilot JSONL when the trace database schema drifts', async () => {

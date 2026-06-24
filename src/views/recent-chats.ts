@@ -32,7 +32,6 @@ export class RecentChatsTreeProvider implements vscode.TreeDataProvider<RecentCh
   constructor(private readonly loadChats: () => Promise<ChatMetadata[]>) {}
 
   refresh(): void {
-    // eslint-disable-next-line unicorn/no-useless-undefined -- vscode.EventEmitter#fire requires an explicit argument
     this.changed.fire(undefined)
   }
 
@@ -67,7 +66,7 @@ export class RecentChatsTreeProvider implements vscode.TreeDataProvider<RecentCh
     treeItem.command = {
       command: 'breadcrumbs.openChatDetail',
       title: 'Open Chat Detail',
-      arguments: [{ provider: chat.provider, chatKey: chat.chatKey, contentMode: 'all' }],
+      arguments: [{ provider: chat.provider, chatKey: chat.chatKey }],
     }
     treeItem.contextValue = `breadcrumbs.recent.chat.${chat.provider}`
     treeItem.tooltip = recentChatTooltip(chat)

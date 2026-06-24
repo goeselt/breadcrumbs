@@ -1,9 +1,9 @@
-import { readdir, rm, stat } from 'node:fs/promises'
+import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import type { AgentId } from '../agent.js'
 import { sourceIdForPath } from '../chat-identity.js'
 import { reportTotals, sortChats, type ChatMetadata, type ChatMetadataReport } from '../chat-metadata.js'
-import { type JsonlReadStats } from '../jsonl.js'
+import { isObject, type JsonlReadStats } from '../jsonl.js'
 import { expandHome, toHomeRelative } from '../path.js'
 import { providerAdapter, type ProviderAdapter, type SourceFormat } from '../adapters/registry.js'
 import {
@@ -12,8 +12,27 @@ import {
   saveJsonlIndex,
   type IndexedJsonlFile,
   type JsonlIndexOptions,
+  type JsonlIndexRefresh,
   type ParserDiagnostics,
 } from './jsonl-index.js'
+
+const SUMMARY_SCHEMA_VERSION = 1
+/**
+ * Bump when the summarized {@link ChatMetadata} shape or the shared summarization changes in a way that an adapter
+ * `parserVersion` bump does not already capture. Guards reuse of cached summaries.
+ */
+const SUMMARY_FORMAT_VERSION = 1
+
+interface SummaryCacheFile {
+  schemaVersion: typeof SUMMARY_SCHEMA_VERSION
+  formatVersion: number
+  sourceId: string
+  parserVersion: number
+  byteOffset: number
+  size: number
+  mtimeMs: number
+  chats: ChatMetadata[]
+}
 
 export interface IndexedMetadataOptions {
   storageRoot: string
@@ -138,12 +157,13 @@ export async function refreshIndexedFiles<T>(
   for (const file of files) {
     const sourceId = sourceIdForPath(file)
     const cacheFile = path.join(storage, `${sourceId}.json`)
+    const summaryFile = path.join(storage, `${sourceId}.summary.json`)
     const previous = await loadJsonlIndex<T>(cacheFile)
     try {
       const refresh = await refreshJsonlIndex(file, previous, indexOptions)
       await saveJsonlIndex(cacheFile, refresh.state)
       results.push({
-        chats: summarize(file, refresh.state),
+        chats: await summarizeWithCache(summaryFile, sourceId, file, refresh, summarize),
         sourceId,
         sourcePath: toHomeRelative(file),
         mode: refresh.mode,
@@ -181,13 +201,93 @@ export async function refreshIndexedFiles<T>(
   return results
 }
 
+/**
+ * Returns the summarized chats for a refreshed file, reusing the persisted summary when the source is unchanged so the
+ * per-record summarization is skipped on warm loads.
+ */
+async function summarizeWithCache<T>(
+  summaryFile: string,
+  sourceId: string,
+  file: string,
+  refresh: JsonlIndexRefresh<T>,
+  summarize: (file: string, state: IndexedJsonlFile<T>) => ChatMetadata[],
+): Promise<ChatMetadata[]> {
+  if (refresh.mode === 'unchanged') {
+    const cached = await loadSummaryCache(summaryFile)
+    if (cached && summaryMatches(cached, refresh.state)) return cached.chats
+  }
+  const chats = summarize(file, refresh.state)
+  await saveSummaryCache(summaryFile, sourceId, refresh.state, chats)
+  return chats
+}
+
+function summaryMatches(cached: SummaryCacheFile, state: IndexedJsonlFile<unknown>): boolean {
+  return (
+    cached.formatVersion === SUMMARY_FORMAT_VERSION &&
+    cached.parserVersion === state.parserVersion &&
+    cached.byteOffset === state.byteOffset &&
+    cached.size === state.size &&
+    cached.mtimeMs === state.mtimeMs
+  )
+}
+
+async function loadSummaryCache(file: string): Promise<SummaryCacheFile | undefined> {
+  try {
+    const parsed: unknown = JSON.parse(await readFile(file, 'utf8'))
+    return isSummaryCacheFile(parsed) ? parsed : undefined
+  } catch {
+    return undefined
+  }
+}
+
+async function saveSummaryCache<T>(
+  file: string,
+  sourceId: string,
+  state: IndexedJsonlFile<T>,
+  chats: ChatMetadata[],
+): Promise<void> {
+  await mkdir(path.dirname(file), { recursive: true })
+  const payload: SummaryCacheFile = {
+    schemaVersion: SUMMARY_SCHEMA_VERSION,
+    formatVersion: SUMMARY_FORMAT_VERSION,
+    sourceId,
+    parserVersion: state.parserVersion,
+    byteOffset: state.byteOffset,
+    size: state.size,
+    mtimeMs: state.mtimeMs,
+    chats,
+  }
+  const temporary = `${file}.${process.pid}.${Date.now()}.tmp`
+  await writeFile(temporary, `${JSON.stringify(payload)}\n`, { mode: 0o600 })
+  await rename(temporary, file)
+}
+
+function isSummaryCacheFile(value: unknown): value is SummaryCacheFile {
+  return (
+    isObject(value) &&
+    value.schemaVersion === SUMMARY_SCHEMA_VERSION &&
+    typeof value.formatVersion === 'number' &&
+    typeof value.parserVersion === 'number' &&
+    typeof value.byteOffset === 'number' &&
+    typeof value.size === 'number' &&
+    typeof value.mtimeMs === 'number' &&
+    Array.isArray(value.chats)
+  )
+}
+
 async function removeStaleCaches(storage: string, activeSourceIds: Set<string>): Promise<void> {
   const cacheFiles = await findJsonFiles(storage)
   await Promise.all(
     cacheFiles
-      .filter((file) => !activeSourceIds.has(path.basename(file, '.json')))
+      .filter((file) => !activeSourceIds.has(cacheSourceId(path.basename(file))))
       .map((file) => rm(file, { force: true })),
   )
+}
+
+function cacheSourceId(fileName: string): string {
+  if (fileName.endsWith('.summary.json')) return fileName.slice(0, -'.summary.json'.length)
+  if (fileName.endsWith('.json')) return fileName.slice(0, -'.json'.length)
+  return fileName
 }
 
 async function findJsonFiles(root: string): Promise<string[]> {

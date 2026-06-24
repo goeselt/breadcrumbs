@@ -45,7 +45,7 @@ Lint:
 
 ```bash
 docker pull ghcr.io/goeselt/pedant:latest
-docker run --rm -v "$(pwd):/work" ghcr.io/goeselt/pedant:latest
+docker run --rm -v "$(pwd):/work" ghcr.io/goeselt/pedant:latest --fix --ignore resources/vendor/chart.umd.min.js
 ```
 
 Typecheck, test, and build:
@@ -54,13 +54,13 @@ Typecheck, test, and build:
 npm run verify
 ```
 
-Package:
-
-```bash
-npm run package
-```
-
 ## Submitting Changes
 
 Commit messages and PR titles must follow [Conventional Commits](https://www.conventionalcommits.org/). The release
 pipeline uses the PR title to determine the next version.
+
+## Maintenance
+
+- Packaging, dependency and engine updates, the release pipeline, and the load benchmark:
+  [docs/maintenance.md](docs/maintenance.md).
+- Architecture and provider-drift design rationale: [docs/maintainability.md](docs/maintainability.md).

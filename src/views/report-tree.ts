@@ -74,7 +74,6 @@ export class ReportTreeProvider implements vscode.TreeDataProvider<ReportTreeIte
   constructor(private readonly loadProviders: () => Promise<DetectedProviderItem[]>) {}
 
   refresh(): void {
-    // eslint-disable-next-line unicorn/no-useless-undefined -- vscode.EventEmitter#fire requires an explicit argument
     this.changed.fire(undefined)
   }
 

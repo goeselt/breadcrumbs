@@ -19,7 +19,7 @@ export interface AgentDefinition {
 export const AGENTS: AgentDefinition[] = [
   {
     id: 'copilot',
-    label: 'GitHub Copilot Chat',
+    label: 'GitHub Copilot',
     extensionIds: ['GitHub.copilot-chat', 'github.copilot-chat'],
     relevantSettings: [
       'github.copilot.chat.otel.enabled',

@@ -14,7 +14,7 @@ source definitions live in `src/adapters/registry.ts`, so a future source-shape 
 adapter entry plus focused fixtures/tests instead of cross-cutting index changes. Golden fixtures document observed
 shapes; they do not guarantee future provider compatibility.
 
-## GitHub Copilot Chat
+## GitHub Copilot
 
 Official source:
 
@@ -50,7 +50,7 @@ Observed trace database schema:
 - `span_attributes`: prompt/response, reasoning, system instruction, repository, tool argument/result, and auxiliary
   attributes.
 - `span_events`: `user_message`, `turn_start`, `turn_end`, `tools_available`, and exception events.
-- Real chat sessions are selected from `invoke_agent GitHub Copilot Chat` roots with a `chat_session_id`.
+- Real chat sessions are selected from `invoke_agent GitHub Copilot` roots with a `chat_session_id`.
 - Child `chat` spans define model requests and token usage. Root `invoke_agent` token totals aggregate descendants and
   must not be added again.
 - `parent_span_id` and `tool_call_id` provide the preferred detail-tree relationships.

@@ -34,14 +34,15 @@ jobs:
           private-key: ${{ secrets.RELEASE_APP_KEY }}
 
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          fetch-depth: 0 # bumpkin needs full history to find the previous release tag
+          fetch-depth: 0 # intent release needs full history to find the previous release tag
           token: ${{ steps.app.outputs.token }}
+          persist-credentials: false
 
       - id: intent
         name: Intent Release
-        uses: goeselt/intent@d168da88e1330163fb8943b119685d2af453fd8d # v1.0.2
+        uses: goeselt/intent@e51fe139644bfa27735dabeffc71251effb594be # v1.2.1
         with:
           initial-version: '0.1.0'
 
@@ -54,10 +55,6 @@ jobs:
       - name: Install Dependencies
         if: steps.intent.outputs.release-needed == 'true'
         run: npm ci
-
-      - name: Update
-        if: steps.intent.outputs.release-needed == 'true'
-        run: npm run update
 
       - name: Typecheck
         if: steps.intent.outputs.release-needed == 'true'
@@ -90,19 +87,20 @@ jobs:
 
       - name: Commit Version Bump
         if: steps.intent.outputs.release-needed == 'true'
-        uses: goeselt/scribe@2dde3d76f0a8c6de2974c223b6dd562756fa872e # v1.1.0
+        uses: goeselt/scribe@732387b7af0ebcabc4653253cb5865a31a3cd485 # v1.2.2
         with:
           files: |
             package.json
             package-lock.json
           message: 'chore(version): release v${{ steps.intent.outputs.next-version }}'
+          github-token: ${{ steps.app.outputs.token }}
           git-user-name: ${{ vars.RELEASE_SIGNING_USER }}
           git-user-email: ${{ vars.RELEASE_SIGNING_EMAIL }}
           signing-key: ${{ secrets.RELEASE_SIGNING_KEY }}
 
       - name: Release
         if: steps.intent.outputs.release-needed == 'true'
-        uses: goeselt/dispatch@f82290ff964eaff66e9ef014d1f16fd3833ffb58 # v1.0.4
+        uses: goeselt/dispatch@177d405019f83bf8728e3a132e2b2565d6eacd47 # v1.3.5
         with:
           release-tag: ${{ steps.intent.outputs.release-tag }}
           major-tag: ${{ steps.intent.outputs.major-tag }}

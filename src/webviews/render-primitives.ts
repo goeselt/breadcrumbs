@@ -1,6 +1,5 @@
 import type { AgentId } from '../agent.js'
 import type { ChatMetadata } from '../chat-metadata.js'
-import type { ChatDetailReport } from '../chat-detail.js'
 import type { ReportViewData } from './types.js'
 
 export function escapeHtml(value: unknown): string {
@@ -10,6 +9,10 @@ export function escapeHtml(value: unknown): string {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#39;')
+}
+
+export function escapeJsonForHtml(value: unknown): string {
+  return escapeHtml(JSON.stringify(value).replaceAll('<', '\\u003c'))
 }
 
 export function formatNumber(value: number): string {
@@ -86,6 +89,43 @@ export function metric(label: string, value: string): string {
   return `<div class="metric"><div class="metric-label">${escapeHtml(label)}</div><div class="metric-value">${escapeHtml(value)}</div></div>`
 }
 
+export function chartColor(index: number, alpha = 0.88): string {
+  const palette = [
+    [74, 163, 255],
+    [74, 222, 128],
+    [250, 204, 21],
+    [248, 113, 113],
+    [168, 85, 247],
+    [45, 212, 191],
+    [251, 146, 60],
+    [244, 114, 182],
+  ]
+  const value = palette[index % palette.length]
+  return `rgba(${value[0]}, ${value[1]}, ${value[2]}, ${alpha})`
+}
+
+/** Empty-state message with optional next-step command links so the view is not a dead end. */
+export function emptyState(message: string, actions: Array<{ label: string; command: string }> = []): string {
+  const links = actions
+    .map(
+      (action) =>
+        `<a class="empty-action" href="command:${escapeHtml(action.command)}">${escapeHtml(action.label)}</a>`,
+    )
+    .join('')
+  return `<div class="empty">${escapeHtml(message)}${actions.length > 0 ? `<div class="empty-actions">${links}</div>` : ''}</div>`
+}
+
+export type ChartFrame = 'default' | 'slim' | 'bars-sm' | 'bars-md' | 'bars-lg' | 'bars-xl'
+
+export function chartPanel(title: string, id: string, config: unknown, frame: ChartFrame = 'default'): string {
+  const frameClass = frame === 'default' ? '' : ` chart-frame--${frame}`
+  return `<section class="chart-panel">
+    <h3>${escapeHtml(title)}</h3>
+    <div class="chart-frame${frameClass}"><canvas id="${escapeHtml(id)}" data-chart role="img" aria-label="${escapeHtml(title)} chart"></canvas></div>
+    <template class="chart-config" data-chart-target="${escapeHtml(id)}">${escapeJsonForHtml(config)}</template>
+  </section>`
+}
+
 export function fact(label: string, value: string, code = false): string {
   const renderedValue = code
     ? `<code class="fact-value">${escapeHtml(value)}</code>`
@@ -101,7 +141,7 @@ export function chatField(label: string, value: string, numeric = false): string
 }
 
 export function providerLabel(provider: AgentId): string {
-  if (provider === 'copilot') return 'GitHub Copilot Chat'
+  if (provider === 'copilot') return 'GitHub Copilot'
   if (provider === 'codex') return 'Codex'
   return 'Claude Code'
 }
@@ -118,23 +158,8 @@ export function commandHref(command: string, argument: unknown): string {
   return `command:${command}?${encodeURIComponent(JSON.stringify([argument]))}`
 }
 
-export function chatDetailCommandHref(
-  chat: Pick<ChatMetadata, 'provider' | 'chatKey'>,
-  contentMode: ChatDetailReport['privacy']['contentMode'],
-): string {
-  return `command:breadcrumbs.openChatDetail?${encodeURIComponent(
-    JSON.stringify([
-      {
-        provider: chat.provider,
-        chatKey: chat.chatKey,
-        contentMode,
-      },
-    ]),
-  )}`
-}
-
-export function chatMetadataExportHref(chat: Pick<ChatMetadata, 'provider' | 'chatKey'>): string {
-  return commandHref('breadcrumbs.exportMetadataJson', {
+export function chatDetailCommandHref(chat: Pick<ChatMetadata, 'provider' | 'chatKey'>): string {
+  return commandHref('breadcrumbs.openChatDetail', {
     provider: chat.provider,
     chatKey: chat.chatKey,
   })
@@ -220,6 +245,6 @@ export function chatDetailAction(
   navigation: NonNullable<ReportViewData['chatDetailNavigation']>,
 ): string {
   if (navigation === 'none') return ''
-  const href = chatDetailCommandHref(chat, 'all')
+  const href = chatDetailCommandHref(chat)
   return `<a class="chat-entry-action" href="${escapeHtml(href)}" aria-label="Open details for ${escapeHtml(displayChatTitle(chat))}">Details</a>`
 }

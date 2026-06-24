@@ -4,6 +4,7 @@ docs/
 fixtures/
 src/
 node_modules/
+bench.mjs
 esbuild.mjs
 tsconfig.json
 vitest.config.mts

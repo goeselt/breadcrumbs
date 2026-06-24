@@ -205,12 +205,12 @@ export function summarizeCodexMetadataRecords(
           }
         : undefined,
     billing:
-      credits !== undefined
-        ? { status: 'provider-reported', credits }
-        : {
+      credits === undefined
+        ? {
             status: 'unavailable',
             note: 'Codex exposed rate-limit state but no numeric credit value in this session.',
-          },
+          }
+        : { status: 'provider-reported', credits },
     providerMetadata: {
       modelProvider: provider,
       planType,

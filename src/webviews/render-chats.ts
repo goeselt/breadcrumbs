@@ -6,6 +6,7 @@ import {
   chatMetadataStrings,
   chatList,
   chatServerToolRequests,
+  emptyState,
   formatDuration,
   formatNumber,
   formatOptionalNumber,
@@ -34,7 +35,12 @@ export function renderChats(
     .flatMap((provider) => provider.report?.chats ?? [])
     .filter((chat) => chat.requests > 0)
     .sort((a, b) => timestamp(b.startedAt) - timestamp(a.startedAt))
-  if (chats.length === 0) return '<div class="empty">No indexed chats are available.</div>'
+  if (chats.length === 0) {
+    return emptyState('No indexed chats are available yet.', [
+      { label: 'Refresh index', command: 'breadcrumbs.refreshIndex' },
+      { label: 'Inspect sources', command: 'breadcrumbs.openSources' },
+    ])
+  }
 
   const selectedReport = selectedProvider
     ? selectedReports.find((provider) => provider.provider === selectedProvider)?.report

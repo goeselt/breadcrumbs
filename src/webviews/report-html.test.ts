@@ -1,9 +1,28 @@
 import { describe, expect, it } from 'vitest'
 import type { ChatMetadataReport } from '../chat-metadata.js'
 import type { DiscoveryReport } from '../discovery.js'
-import { renderLoadingHtml, renderReportHtml } from './report-html.js'
+import { renderLoadingHtml, renderReportHtml, WEBVIEW_COMMAND_ALLOWLIST } from './report-html.js'
 
 describe('report Webview HTML', () => {
+  it('links to only allowlisted commands from the report webviews', () => {
+    const report = fixtureReport()
+    const htmls = [
+      renderReportHtml('overview', { providers: [{ provider: 'codex', report }], selectedProvider: 'codex' }, 'n'),
+      renderReportHtml(
+        'chats',
+        { providers: [{ provider: 'codex', report }], selectedProvider: 'codex', chatDetailNavigation: 'command' },
+        'n',
+      ),
+      renderReportHtml('chats', { providers: [] }, 'n'),
+    ]
+    const linked = new Set<string>()
+    for (const html of htmls) {
+      for (const match of html.matchAll(/command:(breadcrumbs\.[a-zA-Z]+)/g)) linked.add(match[1])
+    }
+    expect(linked.size).toBeGreaterThan(0)
+    for (const command of linked) expect(WEBVIEW_COMMAND_ALLOWLIST).toContain(command)
+  })
+
   it('uses a patient first-run loading message', () => {
     const html = renderLoadingHtml('Breadcrumbs', 'nonce-value')
 
@@ -25,7 +44,7 @@ describe('report Webview HTML', () => {
     expect(html).toContain('Please wait a moment')
   })
 
-  it('escapes metadata values and does not enable scripts', () => {
+  it('escapes metadata values and does not enable scripts in the chat list', () => {
     const report = fixtureReport()
     report.chats[0].providerChatId = '<script>alert("chat")</script>'
     report.chats[0].chatId = report.chats[0].providerChatId
@@ -35,12 +54,66 @@ describe('report Webview HTML', () => {
 
     expect(html).not.toContain('<script>')
     expect(html).not.toContain('alert("chat")')
+    expect(html).not.toContain('alert("workspace")')
     expect(html).toContain('script&gt;')
     expect(html).toContain("default-src 'none'")
+    // The chat list is a static view: no charts, so no inline scripts.
     expect(html).not.toContain('script-src')
   })
 
-  it('renders a provider-specific overview without a provider dropdown or scripts', () => {
+  it('offers next-step actions when no chats are indexed', () => {
+    const html = renderReportHtml('chats', { providers: [] }, 'nonce-value')
+    expect(html).toContain('No indexed chats are available')
+    expect(html).toContain('command:breadcrumbs.refreshIndex')
+    expect(html).toContain('command:breadcrumbs.openSources')
+  })
+
+  it('renders an upward breadcrumb for provider views but not for root views', () => {
+    const report = fixtureReport()
+    const providerOverview = renderReportHtml(
+      'overview',
+      { providers: [{ provider: 'codex', report }], selectedProvider: 'codex' },
+      'nonce-value',
+    )
+    expect(providerOverview).toContain('class="breadcrumb"')
+    expect(providerOverview).toContain('command:breadcrumbs.openOverview')
+    expect(providerOverview).toContain('aria-current="page"')
+
+    const providerChats = renderReportHtml(
+      'chats',
+      { providers: [{ provider: 'codex', report }], selectedProvider: 'codex' },
+      'nonce-value',
+    )
+    expect(providerChats).toContain('command:breadcrumbs.openChats')
+
+    const allOverview = renderReportHtml('overview', { providers: [{ provider: 'codex', report }] }, 'nonce-value')
+    expect(allOverview).not.toContain('class="breadcrumb"')
+  })
+
+  it('neutralizes malicious metadata that flows into overview chart configs', () => {
+    const report = fixtureReport()
+    const payload = '</template><script>alert("xss")</script>'
+    report.totals.models[0].model = payload
+    report.chats[0].models[0].model = payload
+    report.chats[0].workspacePaths = [`/repo/${payload}`]
+
+    const html = renderReportHtml(
+      'overview',
+      { providers: [{ provider: 'codex', report }], selectedProvider: 'codex' },
+      'nonce-value',
+    )
+
+    // Charts render, so the payload really does reach the chart-config templates.
+    expect(html).toContain('model-token-chart')
+    expect(html).toContain('overview-workspace-chart')
+    // The payload must not break out of the <template> or inject an executable script.
+    expect(html).not.toContain('</template><script>')
+    expect(html).not.toContain('alert("xss")')
+    // It survives only in the neutralized, JSON-escaped form.
+    expect(html).toContain('\\u003c/template')
+  })
+
+  it('renders a provider-specific overview without a provider dropdown', () => {
     const report = fixtureReport()
     report.index = {
       storagePath: '~/.breadcrumbs/index',
@@ -85,8 +158,34 @@ describe('report Webview HTML', () => {
     expect(html).toContain('codex-session-jsonl')
     expect(html).toContain('Synthetic warning')
     expect(html).not.toContain('provider-select')
-    expect(html).not.toContain('script-src')
-    expect(html).not.toContain('<script')
+    expect(html).toContain("script-src 'nonce-nonce-value'")
+  })
+
+  it('renders overview chart templates and inline Chart.js scripts', () => {
+    const report = fixtureReport()
+    report.totals.models[0].model = '</template><script>alert("model")</script>'
+    report.chats[0].models[0].model = report.totals.models[0].model
+
+    const html = renderReportHtml(
+      'overview',
+      {
+        selectedProvider: 'codex',
+        providers: [{ provider: 'codex', report }],
+      },
+      'nonce-value',
+    )
+
+    expect(html).toContain('class="chart-config"')
+    expect(html).toContain('daily-tokens-chart')
+    expect(html).toContain('daily-requests-chart')
+    expect(html).toContain('model-token-chart')
+    expect(html).toContain('\\u003c/template&gt;')
+    expect(html).not.toContain('<script>alert("model")</script>')
+    expect(html).toContain("script-src 'nonce-nonce-value'")
+    expect(html).toContain('version="4.5.1"')
+    expect(html).toContain('const module = undefined')
+    expect(html).toContain('Chart.js did not initialize in this webview.')
+    expect(html).toContain('new ChartCtor')
   })
 
   it('shows Copilot setup requirements and detected trace sources', () => {
@@ -106,7 +205,7 @@ describe('report Webview HTML', () => {
         {
           agent: {
             id: 'copilot',
-            label: 'GitHub Copilot Chat',
+            label: 'GitHub Copilot',
             extensionIds: ['GitHub.copilot-chat'],
             relevantSettings: [],
             expectedSources: ['trace-database'],
@@ -195,7 +294,7 @@ describe('report Webview HTML', () => {
         {
           agent: {
             id: 'copilot' as const,
-            label: 'GitHub Copilot Chat',
+            label: 'GitHub Copilot',
             extensionIds: ['GitHub.copilot-chat'],
             relevantSettings: [],
             expectedSources: ['trace-database' as const],
@@ -575,25 +674,25 @@ describe('report Webview HTML', () => {
     )
 
     expect(html).toContain('<h1>Codex Chat</h1>')
-    expect(html).toContain('Metadata only')
-    expect(html).toContain('>Metadata</span>')
-    expect(html).toContain('aria-disabled="true">Conversation</span>')
-    expect(html).toContain('aria-disabled="true">Tools</span>')
-    expect(html).toContain('aria-disabled="true">All details</span>')
+    // Breadcrumb gives the detail view a way back up to the provider's chat list.
+    expect(html).toContain('class="breadcrumb"')
+    expect(html).toContain('command:breadcrumbs.openChats')
     expect(html).toContain('Captured content is disabled while VS Code is in Restricted Mode.')
-    expect(html).toContain('Export metadata JSON')
-    expect(html).toContain('command:breadcrumbs.exportMetadataJson?')
+    expect(html).not.toContain('Export metadata JSON')
+    expect(html).not.toContain('command:breadcrumbs.exportMetadataJson?')
     expect(html).toContain('Chat snapshot')
     expect(html).toContain('captured 2026-06-13')
     expect(html).toContain('Background changes do not replace this view.')
     expect(html).toContain('Refresh snapshot')
     expect(html).toContain('command:breadcrumbs.refreshChatSnapshot?')
-    expect(html).not.toContain(encodeURIComponent('"contentMode":"tools"'))
-    expect(html).not.toContain(encodeURIComponent('"contentMode":"all"'))
     expect(html).toContain('Context structure')
     expect(html).toContain('Timeline')
-    expect(html).toContain('Provider signals')
-    expect(html).toContain('Observations')
+    expect(html).not.toContain('Provider signals')
+    expect(html).toContain('Token composition')
+    expect(html).toContain('prompt-composition-chart')
+    expect(html).toContain('completion-composition-chart')
+    expect(html).toContain('model-composition-chart')
+    expect(html).not.toContain('Observations')
     expect(html).toContain('class="detail-list"')
     expect(html).not.toContain('<table')
     expect(html).toContain('User input 1')
@@ -691,11 +790,8 @@ describe('report Webview HTML', () => {
       'nonce-value',
     )
 
-    expect(html).toContain('class="detail-control active" aria-current="page">Tools</span>')
-    expect(html).toContain('>Metadata</a>')
-    expect(html).toContain('>All details</a>')
-    expect(html).toContain('Content mode')
-    expect(html).toContain('Tool details')
+    expect(html).not.toContain('detail-control active')
+    expect(html).not.toContain('Export metadata JSON')
     expect(html).toContain('Arguments / command')
     expect(html).toContain('printf &quot;&lt;sensitive&gt;&quot;')
     expect(html).toContain('Output:')
@@ -703,8 +799,8 @@ describe('report Webview HTML', () => {
     expect(html).toContain('Exit 0')
     expect(html).toContain('3 output tokens')
     expect(html).toContain('chunk-test')
-    expect(html).toContain(encodeURIComponent('"contentMode":"none"'))
-    expect(html).not.toContain('<script')
+    // Captured content must not inject a raw (nonce-less) script tag; chart scripts carry a nonce.
+    expect(html).not.toContain('<script>')
   })
 
   it('renders conversation, reasoning, context, and tool excerpts in all-details mode', () => {
@@ -836,7 +932,7 @@ describe('report Webview HTML', () => {
       'nonce-value',
     )
 
-    expect(html).toContain('class="detail-control active" aria-current="page">All details</span>')
+    expect(html).not.toContain('detail-control active')
     expect(html).toContain('User message')
     expect(html).toContain('Explain &lt;this&gt; failure')
     expect(html).toContain('Agent response')
