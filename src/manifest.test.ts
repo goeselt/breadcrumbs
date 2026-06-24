@@ -55,7 +55,7 @@ describe('extension manifest', () => {
 
     expect(extensionSource).toContain('(kind, selectedProvider, selectedChatKey) =>')
     expect(extensionSource).toContain('loadReportView(ctx, kind, selectedProvider, selectedChatKey)')
-    expect(extensionSource).toContain("const contentMode = vscode.workspace.isTrusted ? 'all' : 'none'")
+    expect(extensionSource).toContain("contentMode: vscode.workspace.isTrusted ? 'all' : 'none'")
     expect(extensionSource).toContain('chatDetailContentEnabled: vscode.workspace.isTrusted')
     expect(extensionSource).toContain(
       "vscode.commands.registerCommand('breadcrumbs.openCopilotSetting', (selection?: { setting?: string }) =>",

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode'
 import { AGENTS, type AgentId } from './agent.js'
 import { readIndexedChatDetail } from './adapters/chat-detail.js'
+import type { ChatDetailReport } from './chat-detail.js'
 import { discoverAgentSources, type DiscoveryReport } from './discovery.js'
 import { readIndexedChatMetadata } from './index/chat-metadata-index.js'
 import { createMetadataIndexWatchers } from './index/watch.js'
@@ -19,6 +20,10 @@ const indexedProviders = new Set<AgentId>()
 const refreshTimers = new Map<AgentId, NodeJS.Timeout>()
 const providerReports = new Map<AgentId, ProviderReportResult>()
 const providerLoads = new Map<AgentId, Promise<ProviderReportResult>>()
+// Session-scoped cache of rendered chat-detail snapshots. Not persisted: detail views can contain
+// captured prompts and secrets, which must not be written to disk. Cleared whenever an index refresh
+// could have changed the underlying chats.
+const chatDetailCache = new Map<string, ChatDetailReport>()
 let discoveryReport: DiscoveryReport | undefined
 let reportPanels: ReportPanelManager | undefined
 let reportTree: ReportTreeProvider | undefined
@@ -168,6 +173,7 @@ export function deactivate() {
   indexedProviders.clear()
   providerReports.clear()
   providerLoads.clear()
+  chatDetailCache.clear()
   discoveryReport = undefined
   metadataWatcher?.dispose()
   metadataWatcher = undefined
@@ -248,6 +254,7 @@ function refreshProviderResult(
 
   const load = (async () => {
     const previous = providerReports.get(provider)?.report
+    chatDetailCache.clear()
     providerReports.set(provider, { provider, report: previous, loading: true })
     try {
       const report = await refreshProvider(ctx, provider, signal, markInitialized)
@@ -296,17 +303,22 @@ async function loadReportView(
     if (!metadata) {
       throw new Error('The selected chat is no longer present in the usage index.')
     }
-    const contentMode = vscode.workspace.isTrusted ? 'all' : 'none'
+    const cacheKey = `${metadata.provider}:${metadata.chatKey}`
+    let chatDetail = chatDetailCache.get(cacheKey)
+    if (!chatDetail) {
+      chatDetail = await readIndexedChatDetail(metadata, {
+        contentMode: vscode.workspace.isTrusted ? 'all' : 'none',
+        maxContentChars: 2_000,
+        maxEvents: 300,
+      })
+      chatDetailCache.set(cacheKey, chatDetail)
+    }
     return {
       discovery: discoveryReport,
       providers: orderedProviderReports(),
       selectedProvider: metadata.provider,
       selectedChatKey: metadata.chatKey,
-      chatDetail: await readIndexedChatDetail(metadata, {
-        contentMode,
-        maxContentChars: 2_000,
-        maxEvents: 300,
-      }),
+      chatDetail,
       chatDetailNavigation: 'command',
       chatDetailContentEnabled: vscode.workspace.isTrusted,
     }
