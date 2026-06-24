@@ -64,6 +64,9 @@ describe('extension manifest', () => {
       // eslint-disable-next-line no-template-curly-in-string -- asserting on literal source text, not a template literal
       "vscode.commands.executeCommand('workbench.action.openSettings', `@id:${selection.setting}`)",
     )
-    expect(panelSource).toContain("enableCommandUris: kind === 'overview' || kind === 'chats' || kind === 'chatDetail'")
+    // Command URIs are scoped to the allowlist (never `true`), and no local resources may load.
+    expect(panelSource).toContain('? WEBVIEW_COMMAND_ALLOWLIST : false')
+    expect(panelSource).toContain('localResourceRoots: []')
+    expect(panelSource).not.toContain('enableCommandUris: true')
   })
 })

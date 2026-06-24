@@ -19,6 +19,22 @@ import type { ReportViewKind } from '../views/report-tree.js'
 
 export type { ProviderReportResult, ReportViewData } from './types.js'
 
+/**
+ * Command IDs the report webviews may link to. `enableCommandUris` is scoped to this allowlist so a
+ * command URI can only invoke these commands -- never an arbitrary VS Code command -- even if HTML
+ * escaping ever regressed. Keep it in sync with the `command:` links produced by the render modules
+ * (the `links to only allowlisted commands` test enforces this).
+ */
+export const WEBVIEW_COMMAND_ALLOWLIST: readonly string[] = [
+  'breadcrumbs.openOverview',
+  'breadcrumbs.openChats',
+  'breadcrumbs.openChatDetail',
+  'breadcrumbs.openSources',
+  'breadcrumbs.openCopilotSetting',
+  'breadcrumbs.refreshIndex',
+  'breadcrumbs.refreshChatSnapshot',
+]
+
 export function renderReportHtml(kind: ReportViewKind, data: ReportViewData, nonce: string): string {
   const title =
     kind === 'overview'

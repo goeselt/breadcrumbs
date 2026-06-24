@@ -1,9 +1,28 @@
 import { describe, expect, it } from 'vitest'
 import type { ChatMetadataReport } from '../chat-metadata.js'
 import type { DiscoveryReport } from '../discovery.js'
-import { renderLoadingHtml, renderReportHtml } from './report-html.js'
+import { renderLoadingHtml, renderReportHtml, WEBVIEW_COMMAND_ALLOWLIST } from './report-html.js'
 
 describe('report Webview HTML', () => {
+  it('links to only allowlisted commands from the report webviews', () => {
+    const report = fixtureReport()
+    const htmls = [
+      renderReportHtml('overview', { providers: [{ provider: 'codex', report }], selectedProvider: 'codex' }, 'n'),
+      renderReportHtml(
+        'chats',
+        { providers: [{ provider: 'codex', report }], selectedProvider: 'codex', chatDetailNavigation: 'command' },
+        'n',
+      ),
+      renderReportHtml('chats', { providers: [] }, 'n'),
+    ]
+    const linked = new Set<string>()
+    for (const html of htmls) {
+      for (const match of html.matchAll(/command:(breadcrumbs\.[a-zA-Z]+)/g)) linked.add(match[1])
+    }
+    expect(linked.size).toBeGreaterThan(0)
+    for (const command of linked) expect(WEBVIEW_COMMAND_ALLOWLIST).toContain(command)
+  })
+
   it('uses a patient first-run loading message', () => {
     const html = renderLoadingHtml('Breadcrumbs', 'nonce-value')
 

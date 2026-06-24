@@ -2,7 +2,13 @@ import { randomBytes } from 'node:crypto'
 import * as vscode from 'vscode'
 import type { AgentId } from '../agent.js'
 import type { ReportViewKind } from '../views/report-tree.js'
-import { renderErrorHtml, renderLoadingHtml, renderReportHtml, type ReportViewData } from './report-html.js'
+import {
+  renderErrorHtml,
+  renderLoadingHtml,
+  renderReportHtml,
+  WEBVIEW_COMMAND_ALLOWLIST,
+  type ReportViewData,
+} from './report-html.js'
 
 interface ReportPanelLoader {
   (kind: ReportViewKind, selectedProvider?: AgentId, selectedChatKey?: string): Promise<ReportViewData>
@@ -45,7 +51,11 @@ export class ReportPanelManager implements vscode.Disposable {
       vscode.ViewColumn.Active,
       {
         enableScripts: kind === 'overview' || kind === 'chatDetail',
-        enableCommandUris: kind === 'overview' || kind === 'chats' || kind === 'chatDetail',
+        // Scope command URIs to our own commands; never allow arbitrary VS Code commands.
+        enableCommandUris:
+          kind === 'overview' || kind === 'chats' || kind === 'chatDetail' ? WEBVIEW_COMMAND_ALLOWLIST : false,
+        // Everything (Chart.js, CSS) is inlined into the HTML; no resource loads from disk are needed.
+        localResourceRoots: [],
         retainContextWhenHidden: true,
       },
     )
