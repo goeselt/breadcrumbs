@@ -1,10 +1,12 @@
 import type { ChatDetailEvent, ChatDetailReport } from '../chat-detail.js'
-import type { ChatMetadata } from '../chat-metadata.js'
+import type { ChatMetadata, ToolUsage } from '../chat-metadata.js'
+import { categoryBarChart, singleBarChart } from './render-charts.js'
 import {
+  chartColor,
+  chartPanel,
   chatDetailCommandHref,
   chatField,
   chatMetadataExportHref,
-  chatMetadataStrings,
   commandHref,
   countLabel,
   displayChatTitle,
@@ -23,7 +25,7 @@ import {
   truncateText,
   workspaceLabel,
 } from './render-primitives.js'
-import { cacheShare, providerTokenMetrics, type ProviderSignal } from './render-shared.js'
+import { renderTokenComposition } from './render-shared.js'
 import type { ReportViewData } from './types.js'
 
 export function renderChatDetail(
@@ -39,12 +41,7 @@ export function renderChatDetail(
   const contextEntries = detail.context.map(renderContextEntry).join('')
   const timelineChains = renderTimelineChains(detail)
   const modelEntries = chat.models.map((model) => renderModelDetail(model, chat.tokens.totalTokens)).join('')
-  const observations = chatObservations(detail)
-  const eventKinds =
-    Object.entries(detail.summary?.eventKinds ?? {})
-      .sort(([, left], [, right]) => right - left)
-      .map(([kind, count]) => `${kind.replaceAll('_', ' ')}: ${formatNumber(count)}`)
-      .join(', ') || 'No structural events observed'
+  const notes = chatNotes(detail)
 
   return `<h2 title="${escapeHtml(truncateText(displayChatTitle(chat), 240))}">${escapeHtml(truncateText(displayChatTitle(chat), 96))}</h2>
   <p>${escapeHtml(formatDate(chat.startedAt))} &middot; ${escapeHtml(workspaceLabel(chat))} &middot; <code>${escapeHtml(shortChatId(chat.providerChatId))}</code></p>
@@ -61,8 +58,32 @@ export function renderChatDetail(
     <a href="#summary">Summary</a>
     <a href="#timeline">Timeline</a>
     <a href="#context">Context</a>
+    <a href="#identity">Identity</a>
   </nav>
   <section id="summary" class="detail-section">
+    <h2>Token composition</h2>
+    ${renderTokenComposition(chat.provider, chat.tokens)}
+    <h2>Models</h2>
+    ${renderModelComposition(chat)}
+    ${modelEntries ? `<div class="detail-list">${modelEntries}</div>` : '<div class="empty">No model metadata is available.</div>'}
+    ${renderProviderTimeline(detail, chat)}
+    <h2>Activity</h2>
+    ${renderToolUsage(chat.tools)}
+    ${renderObservedActivity(detail)}
+    ${notes.length > 0 ? `<h2>Notes</h2>
+    <ul class="notes-list">${notes.map((note) => `<li>${escapeHtml(note)}</li>`).join('')}</ul>` : ''}
+  </section>
+  <section id="timeline" class="detail-section">
+    <h2>Timeline</h2>
+    <p>${formatNumber(detail.summary?.timelineEvents ?? detail.timeline.length)} structural events observed; ${formatNumber(detail.summary?.omittedTimelineEvents ?? 0)} omitted by the display limit. ${escapeHtml(timelineContentDescription(detail))}</p>
+    ${timelineChains || '<div class="empty">No timeline events were observed.</div>'}
+  </section>
+  <section id="context" class="detail-section">
+    <h2>Context structure</h2>
+    <p>${escapeHtml(contextContentDescription(detail))}</p>
+    ${contextEntries ? `<div class="detail-list">${contextEntries}</div>` : '<div class="empty">No context metadata was observed.</div>'}
+  </section>
+  <section id="identity" class="detail-section">
     <h2>Identity and source</h2>
     <div class="facts">
       ${fact('Provider', providerLabel(chat.provider))}
@@ -78,36 +99,6 @@ export function renderChatDetail(
       ${fact('Token semantics', chat.tokens.totalTokenSemantics)}
       ${fact('Content mode', chatDetailContentModeLabel(detail.privacy.contentMode))}
     </div>
-    <h2>Token composition</h2>
-    <div class="summary">
-      ${providerTokenMetrics(chat.provider, chat.tokens)}
-    </div>
-    <h2>Provider signals</h2>
-    <div class="facts">
-      ${chatDetailSignals(chat)
-        .map((signal) => fact(signal.label, signal.value, signal.code))
-        .join('')}
-    </div>
-    <h2>Models</h2>
-    ${modelEntries ? `<div class="detail-list">${modelEntries}</div>` : '<div class="empty">No model metadata is available.</div>'}
-    <h2>Observed activity</h2>
-    <div class="facts">
-      ${fact('Event kinds', eventKinds)}
-      ${fact('Content characters observed', formatNumber(detail.summary?.contentCharsObserved ?? 0))}
-      ${fact('Content characters emitted', formatNumber(detail.summary?.contentCharsEmitted ?? 0))}
-    </div>
-    <h2>Observations</h2>
-    <ul class="observation-list">${observations.map((observation) => `<li>${escapeHtml(observation)}</li>`).join('')}</ul>
-  </section>
-  <section id="timeline" class="detail-section">
-    <h2>Timeline</h2>
-    <p>${formatNumber(detail.summary?.timelineEvents ?? detail.timeline.length)} structural events observed; ${formatNumber(detail.summary?.omittedTimelineEvents ?? 0)} omitted by the display limit. ${escapeHtml(timelineContentDescription(detail))}</p>
-    ${timelineChains || '<div class="empty">No timeline events were observed.</div>'}
-  </section>
-  <section id="context" class="detail-section">
-    <h2>Context structure</h2>
-    <p>${escapeHtml(contextContentDescription(detail))}</p>
-    ${contextEntries ? `<div class="detail-list">${contextEntries}</div>` : '<div class="empty">No context metadata was observed.</div>'}
   </section>`
 }
 
@@ -196,90 +187,216 @@ function contextContentDescription(detail: ChatDetailReport): string {
   return 'Context categories, sources, and observed sizes are shown. Select All details to include captured context text.'
 }
 
-function chatDetailSignals(chat: ChatMetadata): ProviderSignal[] {
-  if (chat.provider === 'copilot') {
-    return [
-      { label: 'Agent names', value: chatMetadataStrings(chat, 'agentNames') },
-      { label: 'Agent types', value: chatMetadataStrings(chat, 'agentTypes') },
-      { label: 'Tool calls', value: formatNumber(chat.tools?.calls ?? 0) },
-      {
-        label: 'Tools',
-        value: chat.tools?.byTool.map((tool) => `${tool.tool}: ${formatNumber(tool.calls)}`).join(', ') || 'n/a',
-      },
-    ]
-  }
-  if (chat.provider === 'codex') {
-    return [
-      { label: 'Context window', value: formatOptionalNumber(chat.modelContextWindow) },
-      {
-        label: 'Reasoning share',
-        value: formatPercent(chat.tokens.reasoningOutputTokens, chat.tokens.outputTokens),
-      },
-      { label: 'Model duration', value: formatDuration(chat.performance?.modelDurationMs) },
-      { label: 'Average time to first token', value: formatDuration(chat.performance?.averageTimeToFirstTokenMs) },
-      { label: 'Plan type', value: chatMetadataStrings(chat, 'planType') },
-    ]
-  }
-  return [
-    { label: 'Run kind', value: chat.kind },
-    { label: 'Agent ID', value: chatMetadataStrings(chat, 'agentId') },
-    { label: 'Cache read', value: formatNumber(chat.tokens.cachedInputTokens) },
-    { label: 'Cache creation', value: formatNumber(chat.tokens.cacheCreationInputTokens) },
-    { label: 'Web fetch requests', value: formatNumber(nestedChatNumber(chat, 'serverToolUse', 'webFetchRequests')) },
-    { label: 'Web search requests', value: formatNumber(nestedChatNumber(chat, 'serverToolUse', 'webSearchRequests')) },
-    { label: 'Service tier', value: chatMetadataStrings(chat, 'serviceTiers') },
-    { label: 'Inference region', value: chatMetadataStrings(chat, 'inferenceGeos') },
-  ]
-}
-
-function nestedChatNumber(chat: ChatMetadata, parentKey: string, childKey: string): number {
-  const parent = chat.providerMetadata[parentKey]
-  if (typeof parent !== 'object' || parent === null || Array.isArray(parent)) return 0
-  const value = (parent as Record<string, unknown>)[childKey]
-  return typeof value === 'number' && Number.isFinite(value) ? value : 0
-}
-
-function chatObservations(detail: ChatDetailReport): string[] {
+function chatNotes(detail: ChatDetailReport): string[] {
   const chat = detail.metadata
   if (!chat) return []
-  const observations: string[] = []
-  const primaryModel = chat.models.slice().sort((a, b) => b.totalTokens - a.totalTokens)[0]
-  if (primaryModel) {
-    observations.push(
-      `${primaryModel.model} accounts for ${formatPercent(primaryModel.totalTokens, chat.tokens.totalTokens)} of recorded chat tokens.`,
-    )
-  }
-  if (chat.tokens.cachedInputTokens > 0) {
-    observations.push(`Cache reads account for ${cacheShare(chat.tokens)} of the applicable input-token denominator.`)
-  } else {
-    observations.push('No cache-read tokens were recorded for this chat.')
-  }
-  if (chat.tokens.reasoningOutputTokens > 0) {
-    observations.push(
-      `Reasoning output accounts for ${formatPercent(chat.tokens.reasoningOutputTokens, chat.tokens.outputTokens)} of recorded output tokens.`,
-    )
-  }
-  if ((detail.summary?.contentCharsObserved ?? 0) > 0) {
-    const observed = formatNumber(detail.summary?.contentCharsObserved ?? 0)
-    const emitted = formatNumber(detail.summary?.contentCharsEmitted ?? 0)
-    observations.push(
-      detail.privacy.contentEmitted
-        ? `${emitted} of ${observed} observed content characters are visible in the current mode.`
-        : `${observed} content characters were observed structurally and remain hidden in metadata-only mode.`,
-    )
-  } else {
-    observations.push('No readable content size was captured for this chat.')
-  }
+  const notes: string[] = []
   if ((detail.summary?.omittedTimelineEvents ?? 0) > 0) {
-    observations.push(
+    notes.push(
       `${formatNumber(detail.summary?.omittedTimelineEvents ?? 0)} timeline events are omitted by the configured display limit.`,
     )
   }
   if ((detail.source?.invalidRecords ?? 0) > 0) {
-    observations.push(`${formatNumber(detail.source?.invalidRecords ?? 0)} source records could not be parsed.`)
+    notes.push(`${formatNumber(detail.source?.invalidRecords ?? 0)} source records could not be parsed.`)
   }
-  for (const caveat of chat.dataQuality.caveats) observations.push(caveat)
-  return observations
+  for (const caveat of chat.dataQuality.caveats) notes.push(caveat)
+  return notes
+}
+
+function renderModelComposition(chat: ChatMetadata): string {
+  const slices = chat.models
+    .filter((model) => model.totalTokens > 0)
+    .map((model): [string, number] => [model.model, model.totalTokens])
+  if (slices.length === 0) return ''
+  return `<div class="chart-grid">
+    ${chartPanel('Model token mix', 'model-composition-chart', singleBarChart(slices, 0), 'slim')}
+  </div>`
+}
+
+function renderToolUsage(tools: ToolUsage | undefined): string {
+  const byTool = (tools?.byTool ?? []).filter((tool) => tool.calls > 0)
+  if (byTool.length === 0) return ''
+  return `<div class="chart-grid">
+    ${chartPanel('Tool usage', 'tool-usage-chart', toolUsageChart(byTool))}
+  </div>`
+}
+
+function renderObservedActivity(detail: ChatDetailReport): string {
+  const eventEntries = Object.entries(detail.summary?.eventKinds ?? {})
+    .map(([kind, count]): [string, number] => [kind.replaceAll('_', ' '), count])
+    .sort((a, b) => b[1] - a[1])
+  const observed = detail.summary?.contentCharsObserved ?? 0
+  const emitted = detail.summary?.contentCharsEmitted ?? 0
+  const panels = [
+    eventEntries.length > 0 ? chartPanel('Event types', 'event-types-chart', categoryBarChart(eventEntries, 4)) : '',
+    observed > 0 || emitted > 0
+      ? chartPanel(
+          'Content characters',
+          'content-chars-chart',
+          categoryBarChart(
+            [
+              ['Observed', observed],
+              ['Emitted', emitted],
+            ],
+            1,
+          ),
+        )
+      : '',
+  ].filter(Boolean)
+  if (panels.length === 0) return '<div class="empty">No structural activity was observed.</div>'
+  return `<div class="chart-grid">${panels.join('')}</div>`
+}
+
+function toolUsageChart(byTool: NonNullable<ToolUsage['byTool']>): unknown {
+  const tools = byTool
+    .slice()
+    .sort((a, b) => b.calls - a.calls)
+    .slice(0, 12)
+  return categoryBarChart(
+    tools.map((tool) => [tool.tool, tool.calls]),
+    1,
+  )
+}
+
+/** Per-iteration bar plus a cumulative line on a secondary axis. */
+function iterationComboChart(
+  values: number[],
+  barLabel: string,
+  cumulativeLabel: string,
+  barColor: number,
+  lineColor: number,
+  pointNoun: string,
+): unknown {
+  const labels = values.map((_, index) => `${pointNoun} ${index + 1}`)
+  let running = 0
+  const cumulative = values.map((value) => (running += value))
+  return {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          type: 'bar',
+          label: barLabel,
+          data: values,
+          backgroundColor: chartColor(barColor, 0.68),
+          borderColor: chartColor(barColor),
+          borderWidth: 1,
+          yAxisID: 'value',
+        },
+        {
+          type: 'line',
+          label: cumulativeLabel,
+          data: cumulative,
+          borderColor: chartColor(lineColor),
+          backgroundColor: chartColor(lineColor, 0.18),
+          borderWidth: 2,
+          pointRadius: 2,
+          tension: 0.25,
+          fill: false,
+          yAxisID: 'cumulative',
+        },
+      ],
+    },
+    options: {
+      interaction: { intersect: false, mode: 'index' },
+      scales: {
+        value: { beginAtZero: true, position: 'left', ticks: { color: chartColor(barColor) } },
+        cumulative: {
+          beginAtZero: true,
+          position: 'right',
+          grid: { drawOnChartArea: false },
+          ticks: { color: chartColor(lineColor) },
+        },
+      },
+    },
+  }
+}
+
+/** Single-axis line over iterations, for metrics where accumulation is meaningless. */
+function iterationLineChart(values: number[], label: string, colorIndex: number, pointNoun: string): unknown {
+  const labels = values.map((_, index) => `${pointNoun} ${index + 1}`)
+  return {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label,
+          data: values,
+          borderColor: chartColor(colorIndex),
+          backgroundColor: chartColor(colorIndex, 0.18),
+          borderWidth: 2,
+          pointRadius: 2,
+          tension: 0.25,
+          fill: true,
+        },
+      ],
+    },
+    options: {
+      scales: { y: { beginAtZero: true, ticks: { color: chartColor(colorIndex) } } },
+      plugins: { legend: { display: false } },
+    },
+  }
+}
+
+function timelineTokenChart(detail: ChatDetailReport): unknown | undefined {
+  const requests = detail.timeline.filter((event) => event.kind === 'model_request' && event.usage)
+  if (requests.length < 2) return undefined
+  const partial = (detail.summary?.omittedTimelineEvents ?? 0) > 0
+  const values = requests.map((event) => event.usage?.totalTokens ?? 0)
+  return iterationComboChart(
+    values,
+    'Request tokens',
+    partial ? 'Visible cumulative tokens' : 'Cumulative tokens',
+    0,
+    3,
+    'Request',
+  )
+}
+
+/**
+ * Per-iteration development charts: total request tokens (lead, full width) followed by the most
+ * informative per-provider signals across model iterations.
+ */
+function renderProviderTimeline(detail: ChatDetailReport, chat: ChatMetadata): string {
+  const requests = detail.timeline.filter((event) => event.kind === 'model_request' && event.usage)
+  const turns = detail.timeline.filter((event) => event.kind === 'turn' && event.durationMs !== undefined)
+  const tokenUsage = timelineTokenChart(detail)
+  const panels: string[] = []
+  const addCombo = (
+    id: string,
+    title: string,
+    cumulativeLabel: string,
+    values: number[],
+    barColor: number,
+    pointNoun: string,
+  ) => {
+    if (values.length < 2 || values.every((value) => value === 0)) return
+    panels.push(chartPanel(title, id, iterationComboChart(values, title, cumulativeLabel, barColor, 3, pointNoun)))
+  }
+  const addLine = (id: string, title: string, values: number[], colorIndex: number, pointNoun: string) => {
+    if (values.length < 2 || values.every((value) => value === 0)) return
+    panels.push(chartPanel(title, id, iterationLineChart(values, title, colorIndex, pointNoun)))
+  }
+  if (chat.provider === 'claude') {
+    addCombo('signal-cache-read-chart', 'Cache read tokens', 'Cumulative', requests.map((event) => event.usage?.cachedInputTokens ?? 0), 1, 'Request')
+    addCombo('signal-cache-creation-chart', 'Cache creation tokens', 'Cumulative', requests.map((event) => event.usage?.cacheCreationInputTokens ?? 0), 2, 'Request')
+  } else if (chat.provider === 'codex') {
+    const contextUsage = requests.map((event) => {
+      const window = detailNumber(event, 'modelContextWindow') ?? 0
+      return window > 0 ? Math.round(((event.usage?.totalTokens ?? 0) / window) * 1000) / 10 : 0
+    })
+    addLine('signal-context-usage-chart', 'Context window usage %', contextUsage, 4, 'Request')
+    addCombo('signal-model-duration-chart', 'Model duration (ms)', 'Cumulative ms', turns.map((event) => event.durationMs ?? 0), 0, 'Turn')
+  } else {
+    addCombo('signal-output-chart', 'Output tokens', 'Cumulative', requests.map((event) => event.usage?.outputTokens ?? 0), 0, 'Request')
+    addCombo('signal-cache-read-chart', 'Cache read tokens', 'Cumulative', requests.map((event) => event.usage?.cachedInputTokens ?? 0), 1, 'Request')
+  }
+  if (!tokenUsage && panels.length === 0) return ''
+  return `<h2>Signals over iterations</h2>
+  ${tokenUsage ? `<div class="chart-grid">${chartPanel('Token usage over requests', 'timeline-token-chart', tokenUsage)}</div>` : ''}
+  ${panels.length > 0 ? `<div class="chart-grid">${panels.join('')}</div>` : ''}`
 }
 
 interface TimelinePresentation {

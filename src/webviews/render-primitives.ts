@@ -12,6 +12,10 @@ export function escapeHtml(value: unknown): string {
     .replaceAll("'", '&#39;')
 }
 
+export function escapeJsonForHtml(value: unknown): string {
+  return escapeHtml(JSON.stringify(value).replaceAll('<', '\\u003c'))
+}
+
 export function formatNumber(value: number): string {
   return new Intl.NumberFormat().format(value)
 }
@@ -84,6 +88,32 @@ export function timestamp(value: string | undefined): number {
 
 export function metric(label: string, value: string): string {
   return `<div class="metric"><div class="metric-label">${escapeHtml(label)}</div><div class="metric-value">${escapeHtml(value)}</div></div>`
+}
+
+export function chartColor(index: number, alpha = 0.88): string {
+  const palette = [
+    [74, 163, 255],
+    [74, 222, 128],
+    [250, 204, 21],
+    [248, 113, 113],
+    [168, 85, 247],
+    [45, 212, 191],
+    [251, 146, 60],
+    [244, 114, 182],
+  ]
+  const value = palette[index % palette.length]
+  return `rgba(${value[0]}, ${value[1]}, ${value[2]}, ${alpha})`
+}
+
+export type ChartFrame = 'default' | 'slim' | 'bars-sm' | 'bars-md' | 'bars-lg' | 'bars-xl'
+
+export function chartPanel(title: string, id: string, config: unknown, frame: ChartFrame = 'default'): string {
+  const frameClass = frame === 'default' ? '' : ` chart-frame--${frame}`
+  return `<section class="chart-panel">
+    <h3>${escapeHtml(title)}</h3>
+    <div class="chart-frame${frameClass}"><canvas id="${escapeHtml(id)}" data-chart></canvas></div>
+    <template class="chart-config" data-chart-target="${escapeHtml(id)}">${escapeJsonForHtml(config)}</template>
+  </section>`
 }
 
 export function fact(label: string, value: string, code = false): string {

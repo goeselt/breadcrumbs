@@ -57,7 +57,7 @@ export class ReportPanelManager implements vscode.Disposable {
       panelTitle(kind, this.providerFor(kind)),
       vscode.ViewColumn.Active,
       {
-        enableScripts: false,
+        enableScripts: kind === 'overview' || kind === 'chatDetail',
         enableCommandUris: kind === 'overview' || kind === 'chats' || kind === 'chatDetail',
         retainContextWhenHidden: true,
       },

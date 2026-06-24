@@ -25,7 +25,7 @@ describe('report Webview HTML', () => {
     expect(html).toContain('Please wait a moment')
   })
 
-  it('escapes metadata values and does not enable scripts', () => {
+  it('escapes metadata values and does not enable scripts in the chat list', () => {
     const report = fixtureReport()
     report.chats[0].providerChatId = '<script>alert("chat")</script>'
     report.chats[0].chatId = report.chats[0].providerChatId
@@ -35,12 +35,14 @@ describe('report Webview HTML', () => {
 
     expect(html).not.toContain('<script>')
     expect(html).not.toContain('alert("chat")')
+    expect(html).not.toContain('alert("workspace")')
     expect(html).toContain('script&gt;')
     expect(html).toContain("default-src 'none'")
+    // The chat list is a static view: no charts, so no inline scripts.
     expect(html).not.toContain('script-src')
   })
 
-  it('renders a provider-specific overview without a provider dropdown or scripts', () => {
+  it('renders a provider-specific overview without a provider dropdown', () => {
     const report = fixtureReport()
     report.index = {
       storagePath: '~/.breadcrumbs/index',
@@ -85,8 +87,34 @@ describe('report Webview HTML', () => {
     expect(html).toContain('codex-session-jsonl')
     expect(html).toContain('Synthetic warning')
     expect(html).not.toContain('provider-select')
-    expect(html).not.toContain('script-src')
-    expect(html).not.toContain('<script')
+    expect(html).toContain("script-src 'nonce-nonce-value'")
+  })
+
+  it('renders overview chart templates and inline Chart.js scripts', () => {
+    const report = fixtureReport()
+    report.totals.models[0].model = '</template><script>alert("model")</script>'
+    report.chats[0].models[0].model = report.totals.models[0].model
+
+    const html = renderReportHtml(
+      'overview',
+      {
+        selectedProvider: 'codex',
+        providers: [{ provider: 'codex', report }],
+      },
+      'nonce-value',
+    )
+
+    expect(html).toContain('class="chart-config"')
+    expect(html).toContain('daily-tokens-chart')
+    expect(html).toContain('daily-requests-chart')
+    expect(html).toContain('model-token-chart')
+    expect(html).toContain('\\u003c/template&gt;')
+    expect(html).not.toContain('<script>alert("model")</script>')
+    expect(html).toContain("script-src 'nonce-nonce-value'")
+    expect(html).toContain('version="4.5.1"')
+    expect(html).toContain('const module = undefined')
+    expect(html).toContain('Chart.js did not initialize in this webview.')
+    expect(html).toContain('new ChartCtor')
   })
 
   it('shows Copilot setup requirements and detected trace sources', () => {
@@ -592,8 +620,12 @@ describe('report Webview HTML', () => {
     expect(html).not.toContain(encodeURIComponent('"contentMode":"all"'))
     expect(html).toContain('Context structure')
     expect(html).toContain('Timeline')
-    expect(html).toContain('Provider signals')
-    expect(html).toContain('Observations')
+    expect(html).not.toContain('Provider signals')
+    expect(html).toContain('Token composition')
+    expect(html).toContain('prompt-composition-chart')
+    expect(html).toContain('completion-composition-chart')
+    expect(html).toContain('model-composition-chart')
+    expect(html).not.toContain('Observations')
     expect(html).toContain('class="detail-list"')
     expect(html).not.toContain('<table')
     expect(html).toContain('User input 1')
@@ -704,7 +736,8 @@ describe('report Webview HTML', () => {
     expect(html).toContain('3 output tokens')
     expect(html).toContain('chunk-test')
     expect(html).toContain(encodeURIComponent('"contentMode":"none"'))
-    expect(html).not.toContain('<script')
+    // Captured content must not inject a raw (nonce-less) script tag; chart scripts carry a nonce.
+    expect(html).not.toContain('<script>')
   })
 
   it('renders conversation, reasoning, context, and tool excerpts in all-details mode', () => {

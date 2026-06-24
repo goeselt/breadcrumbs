@@ -13,13 +13,22 @@ import {
   formatOptionalNumber,
   formatPercent,
   averageDefined,
+  chartColor as color,
+  chartPanel,
   maxDefined,
   metric,
   providerLabel,
   sum,
   timestamp,
 } from './render-primitives.js'
-import { cacheShare, providerTokenMetrics, renderProviderUnavailable, type ProviderSignal } from './render-shared.js'
+import { barFrame, categoryBarChart, doughnutChart, topSlices } from './render-charts.js'
+import {
+  cacheShare,
+  renderProviderUnavailable,
+  renderTokenComposition,
+  tokensByWorkspace,
+  type ProviderSignal,
+} from './render-shared.js'
 import type { ProviderReportResult } from './types.js'
 
 export function renderOverview(
@@ -68,6 +77,28 @@ export function renderOverview(
     .join('')
 
   return `${selected.error ? `<div class="error">Last refresh failed; showing the previous successful index. ${escapeHtml(selected.error)}</div>` : ''}
+  ${selectedProvider === 'copilot' ? renderCopilotSetup(discovery) : ''}
+  <h2>Usage</h2>
+  <div class="summary">
+    ${metric('Main chats', formatNumber(report.totals.chats))}
+    ${metric('Requests', formatNumber(report.totals.requests))}
+    ${metric('Total tokens', formatNumber(tokens.totalTokens))}
+    ${metric('Cache share', cacheShare(tokens))}
+  </div>
+  ${renderProviderCharts(selectedProvider, report)}
+  <h2>Token composition</h2>
+  ${renderTokenComposition(selectedProvider, tokens)}
+  <h2>${escapeHtml(providerSignalTitle(selectedProvider))}</h2>
+  <div class="facts">
+    ${providerSignals(selectedProvider, report)
+      .map((signal) => fact(signal.label, signal.value, signal.code))
+      .join('')}
+  </div>
+  <h2>Models</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Model</th><th class="number">Requests</th><th class="number">Request share</th><th class="number">Input</th><th class="number">Cached</th><th class="number">Output</th><th class="number">Total</th><th class="number">Token share</th></tr></thead>
+    <tbody>${modelRows || '<tr><td colspan="8">No model metadata available.</td></tr>'}</tbody>
+  </table></div>
   <h2>Provider details</h2>
   <div class="facts">
     ${fact('Status', 'Ready')}
@@ -79,30 +110,7 @@ export function renderOverview(
     ${fact('Data quality', quality)}
     ${fact('Token semantics', tokens.totalTokenSemantics)}
   </div>
-  ${selectedProvider === 'copilot' ? renderCopilotSetup(discovery) : ''}
-  ${renderIndexDiagnostics(report)}
-  <h2>Usage</h2>
-  <div class="summary">
-    ${metric('Main chats', formatNumber(report.totals.chats))}
-    ${metric('Requests', formatNumber(report.totals.requests))}
-    ${metric('Total tokens', formatNumber(tokens.totalTokens))}
-    ${metric('Cache share', cacheShare(tokens))}
-  </div>
-  <h2>Token composition</h2>
-  <div class="summary">
-    ${providerTokenMetrics(selectedProvider, tokens)}
-  </div>
-  <h2>${escapeHtml(providerSignalTitle(selectedProvider))}</h2>
-  <div class="facts">
-    ${providerSignals(selectedProvider, report)
-      .map((signal) => fact(signal.label, signal.value, signal.code))
-      .join('')}
-  </div>
-  <h2>Models</h2>
-  <div class="table-wrap"><table>
-    <thead><tr><th>Model</th><th class="number">Requests</th><th class="number">Request share</th><th class="number">Input</th><th class="number">Cached</th><th class="number">Output</th><th class="number">Total</th><th class="number">Token share</th></tr></thead>
-    <tbody>${modelRows || '<tr><td colspan="8">No model metadata available.</td></tr>'}</tbody>
-  </table></div>`
+  ${renderIndexDiagnostics(report)}`
 }
 
 function renderCopilotSetup(discovery: DiscoveryReport | undefined): string {
@@ -272,8 +280,285 @@ function renderAllProvidersOverview(providers: ProviderReportResult[]): string {
     ${metric('Requests', formatNumber(sum(reports.map((report) => report.totals.requests))))}
     ${metric('Observed range', observedRange)}
   </div>
+  ${renderAllProviderCharts(available)}
   <h2>Provider usage</h2>
   <div class="provider-list">${providers.map(renderProviderOverviewEntry).join('')}</div>`
+}
+
+function renderAllProviderCharts(providers: Array<ProviderReportResult & { report: ChatMetadataReport }>): string {
+  if (providers.length === 0) return ''
+  const labels = providers.map((provider) => providerLabel(provider.provider))
+  const tokenValues = providers.map((provider) => {
+    const totals =
+      provider.provider === 'claude'
+        ? (provider.report.totalsIncludingChildren?.tokens ?? provider.report.totals.tokens)
+        : provider.report.totals.tokens
+    return totals.totalTokens
+  })
+  const requestValues = providers.map((provider) => provider.report.totals.requests)
+  const modelTotals = new Map<string, number>()
+  for (const provider of providers) {
+    for (const model of provider.report.totals.models) {
+      modelTotals.set(model.model, (modelTotals.get(model.model) ?? 0) + model.totalTokens)
+    }
+  }
+  const modelSlices = topSlices([...modelTotals])
+  const workspaceEntries = tokensByWorkspace(
+    providers.flatMap((provider) => provider.report.chats),
+    15,
+  )
+
+  return `<h2>Usage charts</h2>
+  <div class="chart-grid">
+    ${chartPanel('Daily tokens by provider', 'all-provider-daily-chart', providerDailyChart(providers))}
+  </div>
+  <div class="chart-grid">
+    ${chartPanel('Provider tokens', 'provider-token-chart', barChart(labels, 'Tokens', tokenValues, color(0)))}
+    ${chartPanel('Provider requests', 'provider-request-chart', barChart(labels, 'Requests', requestValues, color(3)))}
+    ${modelSlices.labels.length > 0 ? chartPanel('Model token mix', 'all-model-chart', doughnutChart(modelSlices)) : ''}
+  </div>
+  ${
+    workspaceEntries.length > 0
+      ? `<div class="chart-grid">${chartPanel('Tokens by workspace', 'all-workspace-chart', categoryBarChart(workspaceEntries, 5, 'Tokens'), barFrame(workspaceEntries.length))}</div>`
+      : ''
+  }`
+}
+
+const PROVIDER_COLOR_ORDER: AgentId[] = ['claude', 'codex', 'copilot']
+
+/** Stacked daily token usage with one colored series per provider, sharing one day axis. */
+function providerDailyChart(providers: Array<ProviderReportResult & { report: ChatMetadataReport }>): unknown {
+  const labels = dailyLabels(providers.flatMap((provider) => provider.report.chats))
+  const datasets = providers.map((provider) => {
+    const buckets = new Map<string, number>()
+    for (const chat of provider.report.chats) {
+      const key = dateKey(chat.startedAt ?? chat.endedAt)
+      if (!key) continue
+      buckets.set(key, (buckets.get(key) ?? 0) + chat.tokens.totalTokens)
+    }
+    const colorIndex = Math.max(0, PROVIDER_COLOR_ORDER.indexOf(provider.provider))
+    return {
+      label: providerLabel(provider.provider),
+      data: labels.map((label) => buckets.get(label) ?? 0),
+      backgroundColor: color(colorIndex, 0.7),
+      borderColor: color(colorIndex),
+      borderWidth: 1,
+      stack: 'tokens',
+    }
+  })
+  return {
+    type: 'bar',
+    data: { labels, datasets },
+    options: {
+      interaction: { intersect: false, mode: 'index' },
+      scales: {
+        x: { stacked: true },
+        y: { stacked: true, beginAtZero: true, ticks: { format: { notation: 'compact', maximumFractionDigits: 1 } } },
+      },
+    },
+  }
+}
+
+function renderProviderCharts(provider: AgentId, report: ChatMetadataReport): string {
+  const tokens =
+    provider === 'claude' ? (report.totalsIncludingChildren?.tokens ?? report.totals.tokens) : report.totals.tokens
+  if (report.chats.length === 0 || tokens.totalTokens === 0) return ''
+
+  const dayLabels = dailyLabels(report.chats)
+  const cacheSubset = tokens.totalTokenSemantics.includes('cached_input_is_a_subset_of_input')
+  const modelSlices = topSlices(report.totals.models.map((model): [string, number] => [model.model, model.totalTokens]))
+  const requestSlices = topSlices(report.totals.models.map((model): [string, number] => [model.model, model.requests]))
+  const workspaceEntries = tokensByWorkspace(report.chats, 15)
+  const toolEntries = toolUsageEntries(report.chats)
+  const reasoningConfig = reasoningShareChart(report.chats, dayLabels)
+  const cacheConfig = cacheShareChart(report.chats, dayLabels, cacheSubset)
+  const distributionPanels = [
+    chartPanel('Model token mix', 'model-token-chart', doughnutChart(modelSlices)),
+    requestSlices.labels.length > 0
+      ? chartPanel('Requests by model', 'model-request-chart', doughnutChart(requestSlices))
+      : '',
+    toolEntries.length > 0
+      ? chartPanel('Tool usage', 'overview-tool-chart', categoryBarChart(toolEntries, 6, 'Calls'))
+      : '',
+  ]
+    .filter(Boolean)
+    .join('')
+
+  return `<h2>Usage charts</h2>
+  <div class="chart-grid">
+    ${chartPanel('Daily tokens', 'daily-tokens-chart', dayLineChart(dayLabels, dailyTotals(report.chats, dayLabels, (chat) => chat.tokens.totalTokens), 'Total tokens', 0, { compact: true }))}
+  </div>
+  <div class="chart-grid">
+    ${chartPanel('Daily requests', 'daily-requests-chart', dayLineChart(dayLabels, dailyTotals(report.chats, dayLabels, (chat) => chat.requests), 'Requests', 3))}
+  </div>
+  ${
+    reasoningConfig
+      ? `<div class="chart-grid">${chartPanel('Reasoning share over time', 'overview-reasoning-chart', reasoningConfig)}</div>`
+      : ''
+  }
+  ${
+    cacheConfig
+      ? `<div class="chart-grid">${chartPanel('Cache hit rate over time', 'overview-cache-chart', cacheConfig)}</div>`
+      : ''
+  }
+  <div class="chart-grid">${distributionPanels}</div>
+  ${
+    workspaceEntries.length > 0
+      ? `<div class="chart-grid">${chartPanel('Tokens by workspace', 'overview-workspace-chart', categoryBarChart(workspaceEntries, 5, 'Tokens'), barFrame(workspaceEntries.length))}</div>`
+      : ''
+  }`
+}
+
+function toolUsageEntries(chats: ChatMetadata[]): Array<[string, number]> {
+  const byTool = new Map<string, number>()
+  for (const chat of chats) {
+    for (const tool of chat.tools?.byTool ?? []) {
+      byTool.set(tool.tool, (byTool.get(tool.tool) ?? 0) + tool.calls)
+    }
+  }
+  return [...byTool]
+    .filter(([, calls]) => calls > 0)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 12)
+}
+
+/** Sorted unique day keys (YYYY-MM-DD) across the chats, used as a shared x scale. */
+function dailyLabels(chats: ChatMetadata[]): string[] {
+  const days = new Set<string>()
+  for (const chat of chats) {
+    const key = dateKey(chat.startedAt ?? chat.endedAt)
+    if (key) days.add(key)
+  }
+  return [...days].sort((a, b) => a.localeCompare(b))
+}
+
+/** Per-day totals for the shared day labels (0 where a day has no data). */
+function dailyTotals(chats: ChatMetadata[], labels: string[], pick: (chat: ChatMetadata) => number): number[] {
+  const buckets = new Map<string, number>()
+  for (const chat of chats) {
+    const key = dateKey(chat.startedAt ?? chat.endedAt)
+    if (!key) continue
+    buckets.set(key, (buckets.get(key) ?? 0) + pick(chat))
+  }
+  return labels.map((label) => buckets.get(label) ?? 0)
+}
+
+/**
+ * Single-axis day line chart shared by every time series (tokens, requests, reasoning %, cache %).
+ * Using one chart type and one left y-axis (pinned by matchAxisWidth) keeps the day scale identical
+ * across the stacked charts -- mixing bar and line types offsets the category axis differently.
+ */
+function dayLineChart(
+  labels: string[],
+  data: number[],
+  seriesLabel: string,
+  colorIndex: number,
+  opts: { max?: number; compact?: boolean } = {},
+): unknown {
+  const ticks = {
+    color: color(colorIndex),
+    ...(opts.compact ? { format: { notation: 'compact', maximumFractionDigits: 1 } } : {}),
+  }
+  return {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: seriesLabel,
+          data,
+          borderColor: color(colorIndex),
+          backgroundColor: color(colorIndex, 0.18),
+          borderWidth: 2,
+          pointRadius: 2,
+          tension: 0.25,
+          fill: true,
+        },
+      ],
+    },
+    options: {
+      matchAxisWidth: 60,
+      interaction: { intersect: false, mode: 'index' },
+      scales: {
+        y: { beginAtZero: true, ticks, ...(opts.max !== undefined ? { max: opts.max } : {}) },
+      },
+      plugins: { legend: { display: false } },
+    },
+  }
+}
+
+function reasoningShareChart(chats: ChatMetadata[], labels: string[]): unknown | undefined {
+  if (sum(chats.map((chat) => chat.tokens.reasoningOutputTokens)) === 0) return undefined
+  const buckets = new Map<string, { reasoning: number; output: number }>()
+  for (const chat of chats) {
+    const key = dateKey(chat.startedAt ?? chat.endedAt)
+    if (!key) continue
+    const bucket = buckets.get(key) ?? { reasoning: 0, output: 0 }
+    bucket.reasoning += chat.tokens.reasoningOutputTokens
+    bucket.output += chat.tokens.outputTokens
+    buckets.set(key, bucket)
+  }
+  const data = labels.map((label) => {
+    const bucket = buckets.get(label)
+    return bucket && bucket.output > 0 ? Math.round((bucket.reasoning / bucket.output) * 1000) / 10 : 0
+  })
+  return dayLineChart(labels, data, 'Reasoning share %', 4, { max: 100 })
+}
+
+function cacheShareChart(chats: ChatMetadata[], labels: string[], subset: boolean): unknown | undefined {
+  if (sum(chats.map((chat) => chat.tokens.cachedInputTokens)) === 0) return undefined
+  const buckets = new Map<string, { cached: number; input: number; cacheCreation: number }>()
+  for (const chat of chats) {
+    const key = dateKey(chat.startedAt ?? chat.endedAt)
+    if (!key) continue
+    const bucket = buckets.get(key) ?? { cached: 0, input: 0, cacheCreation: 0 }
+    bucket.cached += chat.tokens.cachedInputTokens
+    bucket.input += chat.tokens.inputTokens
+    bucket.cacheCreation += chat.tokens.cacheCreationInputTokens
+    buckets.set(key, bucket)
+  }
+  const data = labels.map((label) => {
+    const bucket = buckets.get(label)
+    if (!bucket) return 0
+    const denominator = subset ? bucket.input : bucket.input + bucket.cached + bucket.cacheCreation
+    return denominator > 0 ? Math.round((bucket.cached / denominator) * 1000) / 10 : 0
+  })
+  return dayLineChart(labels, data, 'Cache hit rate %', 5, { max: 100 })
+}
+
+function barChart(labels: string[], label: string, values: number[], chartColor: string): unknown {
+  return {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          label,
+          data: values,
+          backgroundColor: chartColor.replace('0.88', '0.68'),
+          borderColor: chartColor,
+          borderWidth: 1,
+        },
+      ],
+    },
+    options: {
+      scales: {
+        y: { beginAtZero: true },
+      },
+    },
+  }
+}
+
+
+function dateKey(value: string | undefined): string | undefined {
+  if (!value) return undefined
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.valueOf())) return undefined
+  return [
+    parsed.getFullYear(),
+    String(parsed.getMonth() + 1).padStart(2, '0'),
+    String(parsed.getDate()).padStart(2, '0'),
+  ].join('-')
 }
 
 function renderProviderOverviewEntry(provider: ProviderReportResult): string {

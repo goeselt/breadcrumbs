@@ -55,10 +55,6 @@ jobs:
         if: steps.intent.outputs.release-needed == 'true'
         run: npm ci
 
-      - name: Update
-        if: steps.intent.outputs.release-needed == 'true'
-        run: npm run update
-
       - name: Typecheck
         if: steps.intent.outputs.release-needed == 'true'
         run: npm run typecheck
