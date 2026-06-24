@@ -1,34 +1,33 @@
 import type { AgentId } from '../agent.js'
-import type { ChatMetadata, ChatMetadataReport } from '../chat-metadata.js'
+import type { ChatMetadataReport } from '../chat-metadata.js'
 import type { DiscoveryReport } from '../discovery.js'
-import { toHomeRelative } from '../path.js'
+import { barFrame, categoryBarChart, doughnutChart, topSlices } from './render-charts.js'
+import { renderCopilotSetup } from './render-copilot-setup.js'
 import {
+  barChart,
+  cacheShareChart,
+  dailyLabels,
+  dailyTotals,
+  dayLineChart,
+  providerDailyChart,
+  reasoningShareChart,
+  toolUsageEntries,
+} from './render-overview-charts.js'
+import {
+  chartPanel,
   chatField,
-  commandHref,
   escapeHtml,
   fact,
   formatDate,
-  formatDuration,
   formatNumber,
-  formatOptionalNumber,
   formatPercent,
-  averageDefined,
-  chartColor as color,
-  chartPanel,
-  maxDefined,
   metric,
   providerLabel,
   sum,
   timestamp,
 } from './render-primitives.js'
-import { barFrame, categoryBarChart, doughnutChart, topSlices } from './render-charts.js'
-import {
-  cacheShare,
-  renderProviderUnavailable,
-  renderTokenComposition,
-  tokensByWorkspace,
-  type ProviderSignal,
-} from './render-shared.js'
+import { providerSignals, providerSignalTitle } from './render-provider-signals.js'
+import { cacheShare, renderProviderUnavailable, renderTokenComposition, tokensByWorkspace } from './render-shared.js'
 import type { ProviderReportResult } from './types.js'
 
 export function renderOverview(
@@ -113,155 +112,6 @@ export function renderOverview(
   ${renderIndexDiagnostics(report)}`
 }
 
-function renderCopilotSetup(discovery: DiscoveryReport | undefined): string {
-  const agent = discovery?.agents.find((candidate) => candidate.agent.id === 'copilot')
-  if (!agent) return ''
-  const setting = (id: string) => agent.settings.find((candidate) => candidate.id === id)
-  const databaseSetting = setting('github.copilot.chat.otel.dbSpanExporter.enabled')
-  const otelSetting = setting('github.copilot.chat.otel.enabled')
-  const exporterSetting = setting('github.copilot.chat.otel.exporterType')
-  const outfileSetting = setting('github.copilot.chat.otel.outfile')
-  const captureSetting = setting('github.copilot.chat.otel.captureContent')
-  const databaseEnabled = databaseSetting?.value === true
-  const otelEnabled = otelSetting?.value === true
-  const exporterType = exporterSetting?.value
-  const captureContent = captureSetting?.value === true
-  const settingsLocation = discovery?.environment.remoteName
-    ? `Remote Settings for the ${discovery.environment.remoteName} extension host`
-    : 'User Settings on this VS Code installation'
-  const scopeGuidance = discovery?.environment.remoteName
-    ? `Open Settings and select the Remote [${discovery.environment.remoteName}] tab. Workspace Settings also work, but only for this workspace.`
-    : 'Open User Settings. Workspace Settings also work, but only for this workspace.'
-  const preferred = setupEntry({
-    label: 'Structured agent traces',
-    state: databaseEnabled ? 'active' : 'missing',
-    stateLabel: databaseEnabled ? 'Active' : 'Recommended setting missing',
-    description: databaseEnabled
-      ? 'Breadcrumbs can read the hierarchical Copilot trace database with requests, tools, parent-child links, and token usage.'
-      : "Enable Copilot's local trace database. This is Breadcrumbs's preferred source and no output path is required.",
-    current: settingDisplayValue(databaseSetting?.value),
-    target: 'true',
-    settingId: 'github.copilot.chat.otel.dbSpanExporter.enabled',
-    json: databaseEnabled ? undefined : settingsJson({ 'github.copilot.chat.otel.dbSpanExporter.enabled': true }),
-  })
-  const content = setupEntry({
-    label: 'Prompt and tool content',
-    state: captureContent ? 'active' : 'optional',
-    stateLabel: captureContent ? 'Active' : 'Optional',
-    description: captureContent
-      ? 'Copilot may record prompts, responses, reasoning, tool arguments, tool results, source code, paths, and secrets.'
-      : 'Enable only when Chat Detail should include captured prompts, responses, reasoning, and tool data. Token and structural analysis work without it.',
-    current: settingDisplayValue(captureSetting?.value),
-    target: 'true (optional)',
-    settingId: 'github.copilot.chat.otel.captureContent',
-    json: captureContent ? undefined : settingsJson({ 'github.copilot.chat.otel.captureContent': true }),
-  })
-  const fallbackReady =
-    otelEnabled &&
-    exporterType === 'file' &&
-    typeof outfileSetting?.value === 'string' &&
-    outfileSetting.value.length > 0
-  const fallback = setupEntry({
-    label: 'OTel JSONL fallback',
-    state: databaseEnabled || fallbackReady ? 'active' : 'optional',
-    stateLabel: databaseEnabled ? 'Not required' : fallbackReady ? 'Active' : 'Alternative',
-    description: databaseEnabled
-      ? 'The trace database is active, so the flatter JSONL exporter is not required.'
-      : 'Use this only when the trace database is unavailable. Choose an absolute output path on the same extension host.',
-    current: databaseEnabled
-      ? 'not required'
-      : `enabled=${settingDisplayValue(otelSetting?.value)}, exporterType=${settingDisplayValue(exporterType)}, outfile=${settingDisplayValue(outfileSetting?.value)}`,
-    target: databaseEnabled ? 'n/a' : 'enabled=true, exporterType="file", outfile=<absolute path>',
-    settingId: 'github.copilot.chat.otel.enabled',
-    additionalSettingIds: ['github.copilot.chat.otel.exporterType', 'github.copilot.chat.otel.outfile'],
-    json:
-      databaseEnabled || fallbackReady
-        ? undefined
-        : settingsJson({
-            'github.copilot.chat.otel.enabled': true,
-            'github.copilot.chat.otel.exporterType': 'file',
-            'github.copilot.chat.otel.outfile': '<absolute-path>/copilot-otel.jsonl',
-          }),
-  })
-  const sources = agent.sources
-    .filter((source) => source.probe.exists)
-    .map(
-      (source) =>
-        `${source.sourceKind}: ${toDisplayPath(source.probe.path)}${source.analysisSupported ? '' : ' (supplemental)'}`,
-    )
-  return `<h2>Copilot data setup</h2>
-  <p class="setup-intro">Configure Copilot where its extension runs: <strong>${escapeHtml(settingsLocation)}</strong>. ${escapeHtml(scopeGuidance)} Use each Open setting action or merge the shown JSON into that scope's <code>settings.json</code>. After changing telemetry settings, reload the VS Code window, use Copilot Chat, and run <strong>Breadcrumbs: Refresh Usage Index</strong>.</p>
-  <div class="setup-list">
-    ${preferred}
-    ${content}
-    ${fallback}
-  </div>
-  <h2>Detected Copilot sources</h2>
-  <div class="facts">${fact('Sources', sources.join(', ') || 'No supported Copilot source detected.')}</div>`
-}
-
-function setupEntry(input: {
-  label: string
-  state: 'active' | 'missing' | 'optional'
-  stateLabel: string
-  description: string
-  current: string
-  target: string
-  settingId: string
-  additionalSettingIds?: string[]
-  json?: string
-}): string {
-  if (input.state === 'active') {
-    return `<article class="setup-entry">
-      <div class="setup-entry-header">
-        <div class="setup-entry-title">${escapeHtml(input.label)}</div>
-        <div class="setup-entry-state ${input.state}">${escapeHtml(input.stateLabel)}</div>
-      </div>
-    </article>`
-  }
-  const settingIds = [input.settingId, ...(input.additionalSettingIds ?? [])]
-  return `<article class="setup-entry">
-    <div class="setup-entry-header">
-      <div class="setup-entry-title">${escapeHtml(input.label)}</div>
-      <div class="setup-entry-state ${input.state}">${escapeHtml(input.stateLabel)}</div>
-    </div>
-    <div class="setup-entry-description">${escapeHtml(input.description)}</div>
-    <div class="setup-entry-values">
-      ${setupValue('Current value', input.current)}
-      ${setupValue('Target value', input.target)}
-      ${setupValue('Setting', settingIds.join(', '))}
-    </div>
-    <div class="setup-actions">${settingIds
-      .map(
-        (id) =>
-          `<a class="setup-action" href="${escapeHtml(commandHref('breadcrumbs.openCopilotSetting', { setting: id }))}">Open ${escapeHtml(shortSettingName(id))}</a>`,
-      )
-      .join('')}</div>
-    ${input.json ? `<pre class="settings-json">${escapeHtml(input.json)}</pre>` : ''}
-  </article>`
-}
-
-function setupValue(label: string, value: string): string {
-  return `<div class="setup-value"><div class="setup-value-label">${escapeHtml(label)}</div><code>${escapeHtml(value)}</code></div>`
-}
-
-function settingDisplayValue(value: unknown): string {
-  if (value === undefined) return '(not configured)'
-  return JSON.stringify(value)
-}
-
-function settingsJson(settings: Record<string, unknown>): string {
-  return JSON.stringify(settings, null, 2)
-}
-
-function shortSettingName(settingId: string): string {
-  return settingId.replace('github.copilot.chat.otel.', '')
-}
-
-function toDisplayPath(value: string): string {
-  return toHomeRelative(value)
-}
-
 function renderAllProvidersOverview(providers: ProviderReportResult[]): string {
   const available = providers.filter((provider): provider is ProviderReportResult & { report: ChatMetadataReport } =>
     Boolean(provider.report),
@@ -313,8 +163,8 @@ function renderAllProviderCharts(providers: Array<ProviderReportResult & { repor
     ${chartPanel('Daily tokens by provider', 'all-provider-daily-chart', providerDailyChart(providers))}
   </div>
   <div class="chart-grid">
-    ${chartPanel('Provider tokens', 'provider-token-chart', barChart(labels, 'Tokens', tokenValues, color(0)))}
-    ${chartPanel('Provider requests', 'provider-request-chart', barChart(labels, 'Requests', requestValues, color(3)))}
+    ${chartPanel('Provider tokens', 'provider-token-chart', barChart(labels, 'Tokens', tokenValues, 0))}
+    ${chartPanel('Provider requests', 'provider-request-chart', barChart(labels, 'Requests', requestValues, 3))}
     ${modelSlices.labels.length > 0 ? chartPanel('Model token mix', 'all-model-chart', doughnutChart(modelSlices)) : ''}
   </div>
   ${
@@ -322,41 +172,6 @@ function renderAllProviderCharts(providers: Array<ProviderReportResult & { repor
       ? `<div class="chart-grid">${chartPanel('Tokens by workspace', 'all-workspace-chart', categoryBarChart(workspaceEntries, 5, 'Tokens'), barFrame(workspaceEntries.length))}</div>`
       : ''
   }`
-}
-
-const PROVIDER_COLOR_ORDER: AgentId[] = ['claude', 'codex', 'copilot']
-
-/** Stacked daily token usage with one colored series per provider, sharing one day axis. */
-function providerDailyChart(providers: Array<ProviderReportResult & { report: ChatMetadataReport }>): unknown {
-  const labels = dailyLabels(providers.flatMap((provider) => provider.report.chats))
-  const datasets = providers.map((provider) => {
-    const buckets = new Map<string, number>()
-    for (const chat of provider.report.chats) {
-      const key = dateKey(chat.startedAt ?? chat.endedAt)
-      if (!key) continue
-      buckets.set(key, (buckets.get(key) ?? 0) + chat.tokens.totalTokens)
-    }
-    const colorIndex = Math.max(0, PROVIDER_COLOR_ORDER.indexOf(provider.provider))
-    return {
-      label: providerLabel(provider.provider),
-      data: labels.map((label) => buckets.get(label) ?? 0),
-      backgroundColor: color(colorIndex, 0.7),
-      borderColor: color(colorIndex),
-      borderWidth: 1,
-      stack: 'tokens',
-    }
-  })
-  return {
-    type: 'bar',
-    data: { labels, datasets },
-    options: {
-      interaction: { intersect: false, mode: 'index' },
-      scales: {
-        x: { stacked: true },
-        y: { stacked: true, beginAtZero: true, ticks: { format: { notation: 'compact', maximumFractionDigits: 1 } } },
-      },
-    },
-  }
 }
 
 function renderProviderCharts(provider: AgentId, report: ChatMetadataReport): string {
@@ -407,158 +222,6 @@ function renderProviderCharts(provider: AgentId, report: ChatMetadataReport): st
       ? `<div class="chart-grid">${chartPanel('Tokens by workspace', 'overview-workspace-chart', categoryBarChart(workspaceEntries, 5, 'Tokens'), barFrame(workspaceEntries.length))}</div>`
       : ''
   }`
-}
-
-function toolUsageEntries(chats: ChatMetadata[]): Array<[string, number]> {
-  const byTool = new Map<string, number>()
-  for (const chat of chats) {
-    for (const tool of chat.tools?.byTool ?? []) {
-      byTool.set(tool.tool, (byTool.get(tool.tool) ?? 0) + tool.calls)
-    }
-  }
-  return [...byTool]
-    .filter(([, calls]) => calls > 0)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 12)
-}
-
-/** Sorted unique day keys (YYYY-MM-DD) across the chats, used as a shared x scale. */
-function dailyLabels(chats: ChatMetadata[]): string[] {
-  const days = new Set<string>()
-  for (const chat of chats) {
-    const key = dateKey(chat.startedAt ?? chat.endedAt)
-    if (key) days.add(key)
-  }
-  return [...days].sort((a, b) => a.localeCompare(b))
-}
-
-/** Per-day totals for the shared day labels (0 where a day has no data). */
-function dailyTotals(chats: ChatMetadata[], labels: string[], pick: (chat: ChatMetadata) => number): number[] {
-  const buckets = new Map<string, number>()
-  for (const chat of chats) {
-    const key = dateKey(chat.startedAt ?? chat.endedAt)
-    if (!key) continue
-    buckets.set(key, (buckets.get(key) ?? 0) + pick(chat))
-  }
-  return labels.map((label) => buckets.get(label) ?? 0)
-}
-
-/**
- * Single-axis day line chart shared by every time series (tokens, requests, reasoning %, cache %).
- * Using one chart type and one left y-axis (pinned by matchAxisWidth) keeps the day scale identical
- * across the stacked charts -- mixing bar and line types offsets the category axis differently.
- */
-function dayLineChart(
-  labels: string[],
-  data: number[],
-  seriesLabel: string,
-  colorIndex: number,
-  opts: { max?: number; compact?: boolean } = {},
-): unknown {
-  const ticks = {
-    color: color(colorIndex),
-    ...(opts.compact ? { format: { notation: 'compact', maximumFractionDigits: 1 } } : {}),
-  }
-  return {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [
-        {
-          label: seriesLabel,
-          data,
-          borderColor: color(colorIndex),
-          backgroundColor: color(colorIndex, 0.18),
-          borderWidth: 2,
-          pointRadius: 2,
-          tension: 0.25,
-          fill: true,
-        },
-      ],
-    },
-    options: {
-      matchAxisWidth: 60,
-      interaction: { intersect: false, mode: 'index' },
-      scales: {
-        y: { beginAtZero: true, ticks, ...(opts.max !== undefined ? { max: opts.max } : {}) },
-      },
-      plugins: { legend: { display: false } },
-    },
-  }
-}
-
-function reasoningShareChart(chats: ChatMetadata[], labels: string[]): unknown | undefined {
-  if (sum(chats.map((chat) => chat.tokens.reasoningOutputTokens)) === 0) return undefined
-  const buckets = new Map<string, { reasoning: number; output: number }>()
-  for (const chat of chats) {
-    const key = dateKey(chat.startedAt ?? chat.endedAt)
-    if (!key) continue
-    const bucket = buckets.get(key) ?? { reasoning: 0, output: 0 }
-    bucket.reasoning += chat.tokens.reasoningOutputTokens
-    bucket.output += chat.tokens.outputTokens
-    buckets.set(key, bucket)
-  }
-  const data = labels.map((label) => {
-    const bucket = buckets.get(label)
-    return bucket && bucket.output > 0 ? Math.round((bucket.reasoning / bucket.output) * 1000) / 10 : 0
-  })
-  return dayLineChart(labels, data, 'Reasoning share %', 4, { max: 100 })
-}
-
-function cacheShareChart(chats: ChatMetadata[], labels: string[], subset: boolean): unknown | undefined {
-  if (sum(chats.map((chat) => chat.tokens.cachedInputTokens)) === 0) return undefined
-  const buckets = new Map<string, { cached: number; input: number; cacheCreation: number }>()
-  for (const chat of chats) {
-    const key = dateKey(chat.startedAt ?? chat.endedAt)
-    if (!key) continue
-    const bucket = buckets.get(key) ?? { cached: 0, input: 0, cacheCreation: 0 }
-    bucket.cached += chat.tokens.cachedInputTokens
-    bucket.input += chat.tokens.inputTokens
-    bucket.cacheCreation += chat.tokens.cacheCreationInputTokens
-    buckets.set(key, bucket)
-  }
-  const data = labels.map((label) => {
-    const bucket = buckets.get(label)
-    if (!bucket) return 0
-    const denominator = subset ? bucket.input : bucket.input + bucket.cached + bucket.cacheCreation
-    return denominator > 0 ? Math.round((bucket.cached / denominator) * 1000) / 10 : 0
-  })
-  return dayLineChart(labels, data, 'Cache hit rate %', 5, { max: 100 })
-}
-
-function barChart(labels: string[], label: string, values: number[], chartColor: string): unknown {
-  return {
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [
-        {
-          label,
-          data: values,
-          backgroundColor: chartColor.replace('0.88', '0.68'),
-          borderColor: chartColor,
-          borderWidth: 1,
-        },
-      ],
-    },
-    options: {
-      scales: {
-        y: { beginAtZero: true },
-      },
-    },
-  }
-}
-
-
-function dateKey(value: string | undefined): string | undefined {
-  if (!value) return undefined
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.valueOf())) return undefined
-  return [
-    parsed.getFullYear(),
-    String(parsed.getMonth() + 1).padStart(2, '0'),
-    String(parsed.getDate()).padStart(2, '0'),
-  ].join('-')
 }
 
 function renderProviderOverviewEntry(provider: ProviderReportResult): string {
@@ -634,103 +297,4 @@ function providerQuality(report: ChatMetadataReport): string {
       .map(([confidence, count]) => `${confidence}: ${formatNumber(count)}`)
       .join(', ') || 'Quality unknown'
   )
-}
-
-function providerSignalTitle(provider: AgentId): string {
-  if (provider === 'copilot') return 'Copilot activity'
-  if (provider === 'codex') return 'Codex execution'
-  return 'Claude activity'
-}
-
-function providerSignals(provider: AgentId, report: ChatMetadataReport): ProviderSignal[] {
-  if (provider === 'copilot') {
-    return [
-      { label: 'Turns', value: formatOptionalNumber(report.totals.turns) },
-      { label: 'Tool calls', value: formatNumber(sum(report.chats.map((chat) => chat.tools?.calls ?? 0))) },
-      { label: 'Tools', value: aggregateToolNames(report.chats) },
-      { label: 'Agent names', value: metadataStrings(report.chats, 'agentNames') },
-      { label: 'Agent types', value: metadataStrings(report.chats, 'agentTypes') },
-    ]
-  }
-  if (provider === 'codex') {
-    return [
-      { label: 'Turns', value: formatOptionalNumber(report.totals.turns) },
-      {
-        label: 'Reasoning share',
-        value: formatPercent(report.totals.tokens.reasoningOutputTokens, report.totals.tokens.outputTokens),
-      },
-      {
-        label: 'Largest context window',
-        value: formatOptionalNumber(maxDefined(report.chats.map((chat) => chat.modelContextWindow))),
-      },
-      { label: 'Model duration', value: formatDuration(report.totals.modelDurationMs) },
-      {
-        label: 'Average time to first token',
-        value: formatDuration(averageDefined(report.chats.map((chat) => chat.performance?.averageTimeToFirstTokenMs))),
-      },
-      { label: 'Plan types', value: metadataStrings(report.chats, 'planType') },
-      { label: 'Workspaces', value: uniqueWorkspaceCount(report.chats) },
-    ]
-  }
-  const childTotals = report.totalsIncludingChildren
-  return [
-    { label: 'Subagent runs', value: formatNumber(report.chats.filter((chat) => chat.kind === 'subagent').length) },
-    { label: 'Tokens including subagents', value: childTotals ? formatNumber(childTotals.tokens.totalTokens) : 'n/a' },
-    {
-      label: 'Web fetch requests',
-      value: formatNumber(sumNestedNumber(report.chats, 'serverToolUse', 'webFetchRequests')),
-    },
-    {
-      label: 'Web search requests',
-      value: formatNumber(sumNestedNumber(report.chats, 'serverToolUse', 'webSearchRequests')),
-    },
-    { label: 'Service tiers', value: metadataStrings(report.chats, 'serviceTiers') },
-    { label: 'Inference regions', value: metadataStrings(report.chats, 'inferenceGeos') },
-    { label: 'Speeds', value: metadataStrings(report.chats, 'speeds') },
-  ]
-}
-
-function aggregateToolNames(chats: ChatMetadata[]): string {
-  const tools = new Map<string, number>()
-  for (const chat of chats) {
-    for (const tool of chat.tools?.byTool ?? []) {
-      tools.set(tool.tool, (tools.get(tool.tool) ?? 0) + tool.calls)
-    }
-  }
-  return (
-    [...tools]
-      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-      .map(([tool, calls]) => `${tool}: ${formatNumber(calls)}`)
-      .join(', ') || 'n/a'
-  )
-}
-
-function metadataStrings(chats: ChatMetadata[], key: string): string {
-  const values = new Set<string>()
-  for (const chat of chats) {
-    const value = chat.providerMetadata[key]
-    if (typeof value === 'string' && value) values.add(value)
-    if (Array.isArray(value)) {
-      for (const entry of value) {
-        if (typeof entry === 'string' && entry) values.add(entry)
-      }
-    }
-  }
-  return [...values].sort().join(', ') || 'n/a'
-}
-
-function sumNestedNumber(chats: ChatMetadata[], parentKey: string, childKey: string): number {
-  let total = 0
-  for (const chat of chats) {
-    const parent = chat.providerMetadata[parentKey]
-    if (typeof parent !== 'object' || parent === null || Array.isArray(parent)) continue
-    const value = (parent as Record<string, unknown>)[childKey]
-    if (typeof value === 'number' && Number.isFinite(value)) total += value
-  }
-  return total
-}
-
-function uniqueWorkspaceCount(chats: ChatMetadata[]): string {
-  const workspaces = new Set(chats.flatMap((chat) => chat.workspacePaths))
-  return formatNumber(workspaces.size)
 }
