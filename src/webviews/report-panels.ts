@@ -1,17 +1,11 @@
 import { randomBytes } from 'node:crypto'
 import * as vscode from 'vscode'
 import type { AgentId } from '../agent.js'
-import type { ContentMode } from '../chat-detail.js'
 import type { ReportViewKind } from '../views/report-tree.js'
 import { renderErrorHtml, renderLoadingHtml, renderReportHtml, type ReportViewData } from './report-html.js'
 
 interface ReportPanelLoader {
-  (
-    kind: ReportViewKind,
-    selectedProvider?: AgentId,
-    selectedChatKey?: string,
-    selectedContentMode?: ContentMode,
-  ): Promise<ReportViewData>
+  (kind: ReportViewKind, selectedProvider?: AgentId, selectedChatKey?: string): Promise<ReportViewData>
 }
 
 const TITLES: Record<ReportViewKind, string> = {
@@ -28,22 +22,15 @@ export class ReportPanelManager implements vscode.Disposable {
   private chatsProvider: AgentId | undefined
   private detailProvider: AgentId | undefined
   private selectedChatKey: string | undefined
-  private detailContentMode: ContentMode = 'all'
 
   constructor(private readonly load: ReportPanelLoader) {}
 
-  async open(
-    kind: ReportViewKind,
-    selectedProvider?: AgentId,
-    selectedChatKey?: string,
-    selectedContentMode?: ContentMode,
-  ): Promise<void> {
+  async open(kind: ReportViewKind, selectedProvider?: AgentId, selectedChatKey?: string): Promise<void> {
     if (kind === 'overview') this.overviewProvider = selectedProvider
     if (kind === 'chats') this.chatsProvider = selectedProvider
     if (kind === 'chatDetail') {
       this.detailProvider = selectedProvider
       this.selectedChatKey = selectedChatKey
-      this.detailContentMode = selectedContentMode ?? 'all'
     }
     const existing = this.panels.get(kind)
     if (existing) {
@@ -90,12 +77,7 @@ export class ReportPanelManager implements vscode.Disposable {
     panel.title = title
     panel.webview.html = renderLoadingHtml(title, nonce)
     try {
-      const data = await this.load(
-        kind,
-        provider,
-        kind === 'chatDetail' ? this.selectedChatKey : undefined,
-        kind === 'chatDetail' ? this.detailContentMode : undefined,
-      )
+      const data = await this.load(kind, provider, kind === 'chatDetail' ? this.selectedChatKey : undefined)
       if (this.panels.get(kind) !== panel) return
       panel.webview.html = renderReportHtml(kind, data, nonce)
     } catch (error) {

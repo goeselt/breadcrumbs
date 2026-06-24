@@ -4,9 +4,7 @@ import { categoryBarChart, singleBarChart } from './render-charts.js'
 import {
   chartColor,
   chartPanel,
-  chatDetailCommandHref,
   chatField,
-  chatMetadataExportHref,
   commandHref,
   countLabel,
   displayChatTitle,
@@ -97,7 +95,6 @@ export function renderChatDetail(
       ${fact('Records / invalid', `${formatNumber(detail.source?.recordsRead ?? 0)} / ${formatNumber(detail.source?.invalidRecords ?? 0)}`)}
       ${fact('Data quality', chat.dataQuality.confidence)}
       ${fact('Token semantics', chat.tokens.totalTokenSemantics)}
-      ${fact('Content mode', chatDetailContentModeLabel(detail.privacy.contentMode))}
     </div>
   </section>`
 }
@@ -123,30 +120,7 @@ function renderChatDetailControls(
   contentEnabled: boolean,
 ): string {
   if (!detail.metadata || navigation === 'none') return ''
-  const modes: Array<{ mode: ChatDetailReport['privacy']['contentMode']; label: string }> = [
-    { mode: 'none', label: 'Metadata' },
-    { mode: 'messages', label: 'Conversation' },
-    { mode: 'tools', label: 'Tools' },
-    { mode: 'all', label: 'All details' },
-  ]
-  const options = modes
-    .map(({ mode, label }) => {
-      if (mode === detail.privacy.contentMode) {
-        return `<span class="detail-control active" aria-current="page">${label}</span>`
-      }
-      if (!contentEnabled && mode !== 'none') {
-        return `<span class="detail-control disabled" aria-disabled="true">${label}</span>`
-      }
-      const href = chatDetailCommandHref(detail.metadata!, mode)
-      return `<a class="detail-control" href="${escapeHtml(href)}">${label}</a>`
-    })
-    .join('')
-  const exportAction =
-    navigation === 'command'
-      ? `<a class="detail-control" href="${escapeHtml(chatMetadataExportHref(detail.metadata))}">Export metadata JSON</a>`
-      : ''
   return `<div class="detail-controls">
-    <div class="detail-control-options" aria-label="Captured content mode">${options}${exportAction}</div>
     <span class="detail-control-note">${
       contentEnabled
         ? `${escapeHtml(detail.privacy.warning)} Content is read locally, limited to ${formatNumber(detail.privacy.maxContentCharsPerField)} characters per field, and is not persisted by this view.`
@@ -162,29 +136,16 @@ function chatSnapshotRefreshHref(chat: ChatMetadata): string {
   })
 }
 
-function chatDetailContentModeLabel(mode: ChatDetailReport['privacy']['contentMode']): string {
-  if (mode === 'tools') return 'Tool details'
-  if (mode === 'messages') return 'Messages'
-  if (mode === 'all') return 'All captured details'
-  return 'Metadata only'
-}
-
 function timelineContentDescription(detail: ChatDetailReport): string {
   if (detail.privacy.contentMode === 'none') return 'Captured event content is hidden.'
-  if (detail.privacy.contentMode === 'messages') {
-    return 'User and agent conversation excerpts are shown when captured; tool and instruction content remains hidden.'
-  }
-  if (detail.privacy.contentMode === 'tools') {
-    return 'Tool arguments and outputs are shown when captured; conversation and instruction content remains hidden.'
-  }
   return 'All supported captured event excerpts are shown within the per-field limit.'
 }
 
 function contextContentDescription(detail: ChatDetailReport): string {
-  if (detail.privacy.contentMode === 'all') {
-    return 'Captured instructions, attachments, and other context are shown when the provider stored them.'
+  if (detail.privacy.contentMode === 'none') {
+    return 'Context categories, sources, and observed sizes are shown. Captured context text is hidden in Restricted Mode.'
   }
-  return 'Context categories, sources, and observed sizes are shown. Select All details to include captured context text.'
+  return 'Captured instructions, attachments, and other context are shown when the provider stored them.'
 }
 
 function chatNotes(detail: ChatDetailReport): string[] {

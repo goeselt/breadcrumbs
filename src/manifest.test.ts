@@ -42,10 +42,10 @@ describe('extension manifest', () => {
       expect.objectContaining({ view: 'breadcrumbs.recentChats' }),
     )
     expect(manifest.contributes?.commands).toContainEqual(
-      expect.objectContaining({ command: 'breadcrumbs.exportMetadataJson' }),
-    )
-    expect(manifest.contributes?.commands).toContainEqual(
       expect.objectContaining({ command: 'breadcrumbs.refreshChatSnapshot' }),
+    )
+    expect(manifest.contributes?.commands).not.toContainEqual(
+      expect.objectContaining({ command: 'breadcrumbs.exportMetadataJson' }),
     )
   })
 
@@ -53,11 +53,9 @@ describe('extension manifest', () => {
     const extensionSource = await readFile(path.resolve('src/extension.ts'), 'utf8')
     const panelSource = await readFile(path.resolve('src/webviews/report-panels.ts'), 'utf8')
 
-    expect(extensionSource).toContain('(kind, selectedProvider, selectedChatKey, selectedContentMode) =>')
-    expect(extensionSource).toContain(
-      'loadReportView(ctx, kind, selectedProvider, selectedChatKey, selectedContentMode)',
-    )
-    expect(extensionSource).toContain("vscode.workspace.isTrusted ? (selectedContentMode ?? 'all') : 'none'")
+    expect(extensionSource).toContain('(kind, selectedProvider, selectedChatKey) =>')
+    expect(extensionSource).toContain('loadReportView(ctx, kind, selectedProvider, selectedChatKey)')
+    expect(extensionSource).toContain("const contentMode = vscode.workspace.isTrusted ? 'all' : 'none'")
     expect(extensionSource).toContain('chatDetailContentEnabled: vscode.workspace.isTrusted')
     expect(extensionSource).toContain(
       "vscode.commands.registerCommand('breadcrumbs.openCopilotSetting', (selection?: { setting?: string }) =>",

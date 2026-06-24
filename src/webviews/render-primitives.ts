@@ -1,6 +1,5 @@
 import type { AgentId } from '../agent.js'
 import type { ChatMetadata } from '../chat-metadata.js'
-import type { ChatDetailReport } from '../chat-detail.js'
 import type { ReportViewData } from './types.js'
 
 export function escapeHtml(value: unknown): string {
@@ -148,23 +147,8 @@ export function commandHref(command: string, argument: unknown): string {
   return `command:${command}?${encodeURIComponent(JSON.stringify([argument]))}`
 }
 
-export function chatDetailCommandHref(
-  chat: Pick<ChatMetadata, 'provider' | 'chatKey'>,
-  contentMode: ChatDetailReport['privacy']['contentMode'],
-): string {
-  return `command:breadcrumbs.openChatDetail?${encodeURIComponent(
-    JSON.stringify([
-      {
-        provider: chat.provider,
-        chatKey: chat.chatKey,
-        contentMode,
-      },
-    ]),
-  )}`
-}
-
-export function chatMetadataExportHref(chat: Pick<ChatMetadata, 'provider' | 'chatKey'>): string {
-  return commandHref('breadcrumbs.exportMetadataJson', {
+export function chatDetailCommandHref(chat: Pick<ChatMetadata, 'provider' | 'chatKey'>): string {
+  return commandHref('breadcrumbs.openChatDetail', {
     provider: chat.provider,
     chatKey: chat.chatKey,
   })
@@ -250,6 +234,6 @@ export function chatDetailAction(
   navigation: NonNullable<ReportViewData['chatDetailNavigation']>,
 ): string {
   if (navigation === 'none') return ''
-  const href = chatDetailCommandHref(chat, 'all')
+  const href = chatDetailCommandHref(chat)
   return `<a class="chat-entry-action" href="${escapeHtml(href)}" aria-label="Open details for ${escapeHtml(displayChatTitle(chat))}">Details</a>`
 }

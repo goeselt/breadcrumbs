@@ -64,11 +64,6 @@
         "title": "Breadcrumbs: Open Sources"
       },
       {
-        "command": "breadcrumbs.exportMetadataJson",
-        "title": "Breadcrumbs: Export Metadata JSON",
-        "icon": "$(export)"
-      },
-      {
         "command": "breadcrumbs.openChatQuickPick",
         "title": "Breadcrumbs: Open Chat",
         "icon": "$(search)"
@@ -145,11 +140,6 @@
           "command": "breadcrumbs.openSources",
           "when": "view == breadcrumbs.sources",
           "group": "navigation@1"
-        },
-        {
-          "command": "breadcrumbs.exportMetadataJson",
-          "when": "view == breadcrumbs.reports || view == breadcrumbs.recentChats",
-          "group": "navigation@4"
         }
       ]
     },

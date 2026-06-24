@@ -67,7 +67,7 @@ export class RecentChatsTreeProvider implements vscode.TreeDataProvider<RecentCh
     treeItem.command = {
       command: 'breadcrumbs.openChatDetail',
       title: 'Open Chat Detail',
-      arguments: [{ provider: chat.provider, chatKey: chat.chatKey, contentMode: 'all' }],
+      arguments: [{ provider: chat.provider, chatKey: chat.chatKey }],
     }
     treeItem.contextValue = `breadcrumbs.recent.chat.${chat.provider}`
     treeItem.tooltip = recentChatTooltip(chat)
