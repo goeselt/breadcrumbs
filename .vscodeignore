@@ -1,6 +1,6 @@
 .github/
 .vscode/
-docs/
+docs/**/*.md
 fixtures/
 src/
 node_modules/
