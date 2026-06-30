@@ -172,7 +172,7 @@
     "package": "npx --yes --package @vscode/vsce vsce package --no-dependencies"
   },
   "devDependencies": {
-    "@types/node": "^26.0.0",
+    "@types/node": "^26.0.1",
     "@types/vscode": "1.120.0",
     "esbuild": "^0.28.1",
     "typescript": "^6.0.3",
